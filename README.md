@@ -4,7 +4,7 @@
 
 - **模型總覽**：開啟 `index.html`（啟用 GitHub Pages 後即為網站首頁），每張卡片可 3D 檢視、播放動畫、下載 .glb
 - **互動版**：`pages/` 底下是各模型的原始製作頁，可以點擊互動，也能從頁面重新匯出 .glb
-- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型的產生程式（ES5，three.js r147–r160 皆可用）
+- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型、雙面繡屏風的產生程式（ES5，three.js r147–r160 皆可用）
 
 ## 模型清單
 
@@ -26,6 +26,7 @@
 | 建鼓 | 禮器 | 虎座立柱、紅漆銅釘鼓身、華蓋五色流蘇 | [`jiangu.glb`](models/jiangu.glb) | 0.54 MB | — | [互動版](pages/zhonggu.html) |
 | 懸鼓 | 禮器 | 紅漆鼓身、銅釘、彩繪雲紋鼓皮 | [`xuangu.glb`](models/xuangu.glb) | 0.28 MB | — | [互動版](pages/zhonggu.html) |
 | 杏樹 | 植物 | 枝條層層分岔、白花（暗紅花萼、黃蕊）綴枝 | [`apricot.glb`](models/apricot.glb) | 0.26 MB | — | [互動版](pages/apricot.html) |
+| 雙面繡屏風 | 禮器 | 六扇折屏、紫檀回紋框；正面尼山六景、背面吉祥花鳥（雙面異繡） | [`screen.glb`](models/screen.glb) | 0.86 MB | — | [互動版](pages/screen.html) |
 
 ## 使用說明
 
@@ -44,5 +45,5 @@ models.json     模型清單（名稱、說明、大小、動畫）
 icons/          網站圖示（SVG 原檔與各尺寸 PNG）
 manifest.json   加到主畫面用的設定
 pages/          各模型的互動製作頁
-src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js）
+src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js、screen.js）
 ```

@@ -1,0 +1,221 @@
+/* 雙面繡屏風（ES5，導覽 three r147 與預覽頁共用）
+   六扇折屏，紫檀木框、回紋邊、雕花屏帽與裙板；絹面為程式「繡」出的畫面（每筆都是短絲線）
+   正面：尼山六景（青綠山水）；背面：吉祥花鳥（牡丹、喜鵲登梅、丹鳳祥雲、松鶴延年、荷塘清趣、竹報平安）——雙面異繡
+   makeScreen(THREE, opt) -> { group, panels:[{mesh(front),back,glow,info}], tick(dt), hit(panel, side) } */
+function makeScreen(THREE, opt) {
+  opt = opt || {};
+  var seed = 7, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  var TAU = Math.PI * 2, CW = opt.texW || 400, CH = opt.texH || 800;
+  var FONT = opt.font || '"Noto Serif TC","PingFang TC","Songti TC",serif';
+  function lerpC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+  function hex(c) { return [parseInt(c.substr(1, 2), 16), parseInt(c.substr(3, 2), 16), parseInt(c.substr(5, 2), 16)]; }
+  function rgb(c, a) { return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + (a === undefined ? 1 : a) + ')'; }
+  function grad(cols, t) { t = Math.max(0, Math.min(0.999, t)); var n = cols.length - 1, i = Math.floor(t * n); return lerpC(hex(cols[i]), hex(cols[i + 1]), t * n - i); }
+  /* 繡：在路徑內以短絲線沿指定方向排滿，顏色沿 tdir 漸層，最後加幾道絲光 */
+  function stitch(g, path, cols, ang, o) {
+    o = o || {}; var b = o.box || [0, 0, CW, CH], sp = o.sp || 2.2, len = o.len || 9, lw = o.lw || 1.7, ca = Math.cos(ang), sa = Math.sin(ang);
+    g.save(); g.clip(path); g.lineCap = 'round'; g.lineWidth = lw;
+    if (o.fill !== false) { var fg = o.radial ? g.createRadialGradient(o.radial[0], o.radial[1], 0, o.radial[0], o.radial[1], o.radial[2]) : g.createLinearGradient(0, b[1], 0, b[3]); for (var q = 0; q < cols.length; q++) fg.addColorStop(q / (cols.length - 1), rgb(hex(cols[o.flip ? cols.length - 1 - q : q]), 1)); g.fillStyle = fg; g.fill(path); }
+    var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, R = Math.hypot(b[2] - b[0], b[3] - b[1]) / 2 + len;
+    for (var v = -R; v < R; v += sp) for (var u = -R + rnd() * len; u < R; u += len * (0.75 + rnd() * 0.4)) {
+      var px = cx + u * ca - v * sa, py = cy + u * sa + v * ca; if (px < b[0] - len || px > b[2] + len || py < b[1] - len || py > b[3] + len) continue;
+      var t = o.radial ? Math.hypot(px - o.radial[0], py - o.radial[1]) / o.radial[2] : (py - b[1]) / (b[3] - b[1] || 1); if (o.flip) t = 1 - t;
+      var c = grad(cols, t + (rnd() - 0.5) * 0.08), l = len * (0.7 + rnd() * 0.35), sh = (rnd() - 0.5) * 0.12;
+      g.strokeStyle = rgb(c, 0.92); g.beginPath(); g.moveTo(px, py); g.lineTo(px + l * Math.cos(ang + sh), py + l * Math.sin(ang + sh)); g.stroke(); }
+    g.globalCompositeOperation = 'lighter'; g.lineWidth = 0.8;   // silk sheen
+    for (var k = 0; k < (o.sheen || 40); k++) { var x = b[0] + rnd() * (b[2] - b[0]), y = b[1] + rnd() * (b[3] - b[1]); g.strokeStyle = 'rgba(255,255,255,0.10)'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + len * 1.6 * ca, y + len * 1.6 * sa); g.stroke(); }
+    g.restore(); }
+  /* 放射繡（花瓣、葉、羽）：從 (cx,cy) 往外 */
+  function radialStitch(g, path, cols, cx, cy, r, o) {
+    o = o || {}; g.save(); g.clip(path); g.lineCap = 'round'; g.lineWidth = o.lw || 1.6;
+    if (o.fill !== false) { var fg = g.createRadialGradient(cx, cy, 0, cx, cy, r); for (var q = 0; q < cols.length; q++) fg.addColorStop(q / (cols.length - 1), rgb(hex(cols[q]), 1)); g.fillStyle = fg; g.fill(path); }
+    var n = o.n || 260; for (var i = 0; i < n; i++) { var a = (o.a0 || 0) + (o.span || TAU) * rnd(), r0 = r * (o.in || 0.05) + rnd() * r * 0.15, r1 = r * (0.55 + rnd() * 0.5);
+      for (var s = r0; s < r1; s += 7) { var t = s / r, c = grad(cols, t + (rnd() - 0.5) * 0.1); g.strokeStyle = rgb(c, 0.9); g.beginPath(); g.moveTo(cx + Math.cos(a) * s, cy + Math.sin(a) * s); g.lineTo(cx + Math.cos(a) * (s + 8), cy + Math.sin(a) * (s + 8)); g.stroke(); } }
+    g.restore(); if (o.edge) { g.strokeStyle = o.edge; g.lineWidth = 1.4; g.stroke(path); } }
+  function P() { return new Path2D(); }
+  function ell(cx, cy, rx, ry, rot) { var p = P(); p.ellipse(cx, cy, rx, ry, rot || 0, 0, TAU); return p; }
+  function silk(g, w, h, tint) {   // 米白絲綢底，細緯線與光澤
+    var gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, tint || '#f4ecdc'); gr.addColorStop(0.5, '#fbf6ea'); gr.addColorStop(1, tint || '#efe5d0'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(160,140,100,.05)'; for (var y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+    g.fillStyle = 'rgba(255,255,255,.05)'; for (var x = 0; x < w; x += 4) g.fillRect(x, 0, 1, h); }
+  function seal(g, x, y, s, txt) { g.fillStyle = '#b02a22'; g.fillRect(x, y, s, s); g.fillStyle = '#fbe9d2'; g.font = 'bold ' + (s * 0.42) + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(txt[0], x + s * 0.5, y + s * 0.3); g.fillText(txt[1], x + s * 0.5, y + s * 0.72); }
+  function title(g, txt, x, y, s) { g.fillStyle = 'rgba(40,30,20,.85)'; g.font = s + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; for (var i = 0; i < txt.length; i++) g.fillText(txt[i], x, y + i * s * 1.12); }
+  /* ---------- 山水元件 ---------- */
+  function ridge(g, x0, x1, base, peaks, cols, ang, mist) {   // peaks: [[x,h],...]
+    var p = P(); p.moveTo(x0, base); var pts = [[x0, base]].concat(peaks).concat([[x1, base]]);
+    for (var i = 1; i < pts.length; i++) { var a = pts[i - 1], b = pts[i], n = 6; for (var j = 1; j <= n; j++) { var t = j / n, sag = Math.sin(t * Math.PI) * (b[1] > a[1] ? -1 : -1) * 0;
+      var yy = a[1] + (b[1] - a[1]) * (0.5 - 0.5 * Math.cos(t * Math.PI)) + (j < n ? (rnd() - 0.35) * 14 : 0); p.lineTo(a[0] + (b[0] - a[0]) * t, yy); } }
+    var bot = mist ? base + 45 : CH; p.lineTo(x1, bot); p.lineTo(x0, bot); p.closePath();
+    var top = Math.min.apply(null, peaks.map(function (q) { return q[1]; }));
+    stitch(g, p, cols, ang === undefined ? -1.25 : ang, { box: [x0, top, x1, base + 40], sp: 1.6, len: 12, lw: 1.9, sheen: 40 });
+    g.save(); g.clip(p); g.strokeStyle = 'rgba(40,60,50,.35)'; g.lineWidth = 1.2;   // 皴法
+    for (var k = 0; k < 26; k++) { var x = x0 + rnd() * (x1 - x0), y = top + rnd() * (base - top); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 6, y + 14, x + (rnd() - 0.5) * 10, y + 30); g.stroke(); }
+    g.restore();
+    if (mist) { g.save(); g.clip(p); var mg = g.createLinearGradient(0, base - 70, 0, base + 46); mg.addColorStop(0, 'rgba(250,246,236,0)'); mg.addColorStop(0.55, 'rgba(250,246,236,.85)'); mg.addColorStop(1, 'rgba(250,246,236,1)'); g.fillStyle = mg; g.fillRect(x0 - 2, base - 70, x1 - x0 + 4, 120); g.restore(); } }
+  function mistBand(g, y, h) { var mg = g.createLinearGradient(0, y - h, 0, y + h); mg.addColorStop(0, 'rgba(250,246,236,0)'); mg.addColorStop(0.5, 'rgba(250,246,236,.85)'); mg.addColorStop(1, 'rgba(250,246,236,0)'); g.fillStyle = mg; g.fillRect(0, y - h, CW, h * 2); }
+  function pine(g, x, y, s) {
+    g.strokeStyle = '#5a4030'; g.lineCap = 'round'; g.lineWidth = 4 * s; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 10 * s, y - 40 * s, x - 4 * s, y - 80 * s); g.stroke();
+    for (var k = 0; k < 4; k++) { var by = y - (30 + k * 16) * s, dir = k % 2 ? 1 : -1, bx = x + dir * (14 + rnd() * 12) * s;
+      g.lineWidth = 2 * s; g.beginPath(); g.moveTo(x + (k % 2 ? 2 : -2) * s, by + 6 * s); g.lineTo(bx, by); g.stroke();
+      radialStitch(g, ell(bx, by, 22 * s, 8 * s), ['#1e3a2c', '#2f5a42', '#4a7a5a'], bx, by, 22 * s, { n: 70, lw: 1.3, span: TAU }); } }
+  function water(g, y0, y1, x0, x1) { var p = P(); p.rect(x0, y0, x1 - x0, y1 - y0); stitch(g, p, ['#bcd2d8', '#9ab8c4', '#d8e6e6'], 0.02, { box: [x0, y0, x1, y1], sp: 2.6, len: 14, sheen: 80 });
+    g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.2; for (var k = 0; k < 20; k++) { var x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0); g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 10, y - 3, x + 22, y); g.stroke(); } }
+  var GREEN = ['#4f7f6a', '#6f9c7c', '#a9c39a', '#d9dcc0'], BLUE = ['#5f7f96', '#88a4b4', '#c4d2d6'], FAR = ['#a8b8bc', '#c8d2cc', '#e6e8de'];
+  var FRONT = [
+    { n: '尼丘', d: '尼山本名尼丘，孔子父母禱於尼丘而生孔子。主峰挺拔，松林雲霧環繞。', draw: function (g) {
+      ridge(g, 0, CW, 330, [[60, 230], [170, 150], [260, 210], [360, 180]], FAR, -1.3, true);
+      ridge(g, 0, CW, 520, [[90, 330], [200, 220], [250, 300], [380, 360]], GREEN, -1.2, true);
+      ridge(g, 0, CW, 680, [[30, 480], [140, 560], [300, 470], [400, 540]], BLUE, -1.1, false);
+      pine(g, 110, 640, 1.2); pine(g, 300, 600, 1.0); pine(g, 330, 650, 0.8); } },
+    { n: '觀川', d: '孔子臨川而嘆：「逝者如斯夫，不舍晝夜。」川上小亭，流水不息。', draw: function (g) {
+      ridge(g, 0, CW, 300, [[80, 200], [220, 170], [340, 230]], FAR, -1.3, true);
+      ridge(g, 0, 220, 520, [[40, 330], [150, 300], [210, 400]], GREEN, -1.2, true);
+      water(g, 520, 700, 0, CW);
+      ridge(g, 200, CW, 640, [[260, 480], [350, 430], [400, 470]], BLUE, -1.1, false);
+      g.fillStyle = '#9a2a22'; g.beginPath(); g.moveTo(268, 470); g.lineTo(330, 470); g.lineTo(312, 452); g.lineTo(286, 452); g.closePath(); g.fill(); g.fillStyle = '#5a3a24'; g.fillRect(278, 470, 4, 26); g.fillRect(316, 470, 4, 26);
+      pine(g, 60, 560, 0.9); } },
+    { n: '五老', d: '五老峰五座山峰並立，形如五位老人拱手相揖。', draw: function (g) {
+      ridge(g, 0, CW, 360, [[40, 240], [110, 160], [190, 120], [270, 170], [350, 230]], FAR, -1.35, true);
+      ridge(g, 0, CW, 560, [[30, 380], [100, 300], [180, 260], [260, 300], [340, 350]], GREEN, -1.25, true);
+      ridge(g, 0, CW, 720, [[60, 600], [200, 560], [380, 610]], BLUE, -1.1, false); pine(g, 80, 700, 1.1); pine(g, 340, 690, 1.0); } },
+    { n: '坤靈', d: '坤靈洞（夫子洞）相傳為孔子出生之處，洞口隱於山崖雲氣之間。', draw: function (g) {
+      ridge(g, 0, CW, 320, [[100, 220], [250, 180], [380, 250]], FAR, -1.3, true);
+      ridge(g, 0, CW, 640, [[20, 300], [160, 260], [260, 330], [390, 420]], GREEN, -1.35, false);
+      var cv = ell(175, 520, 44, 58); g.fillStyle = '#3a3a34'; g.fill(cv); g.strokeStyle = '#6a5a44'; g.lineWidth = 4; g.stroke(cv);
+      mistBand(g, 600, 50); ridge(g, 0, CW, 760, [[0, 650], [200, 640], [400, 680]], BLUE, -1.1, false); pine(g, 300, 720, 1.1); } },
+    { n: '中和', d: '中和壑，兩崖夾峙，飛瀑直下，取「致中和」之意。', draw: function (g) {
+      ridge(g, 0, CW, 300, [[150, 200], [300, 180]], FAR, -1.3, true);
+      ridge(g, 0, 190, 720, [[0, 260], [120, 300], [180, 420]], GREEN, -1.4, false);
+      ridge(g, 210, CW, 720, [[230, 380], [300, 280], [400, 260]], BLUE, -1.4, false);
+      var wf = P(); wf.rect(184, 330, 32, 360); stitch(g, wf, ['#ffffff', '#dce8ec'], Math.PI / 2, { box: [184, 330, 216, 690], sp: 2, len: 16 });
+      mistBand(g, 690, 40); pine(g, 90, 520, 0.9); pine(g, 330, 470, 0.8); } },
+    { n: '智源', d: '智源溪清流潺潺，石上可坐，取「智者樂水」之意。', draw: function (g) {
+      ridge(g, 0, CW, 300, [[60, 230], [200, 170], [360, 210]], FAR, -1.3, true);
+      ridge(g, 0, CW, 480, [[30, 330], [170, 280], [330, 320]], GREEN, -1.2, true);
+      var rv = P(); rv.moveTo(120, 480); rv.quadraticCurveTo(300, 560, 160, 640); rv.quadraticCurveTo(60, 700, 220, CH); rv.lineTo(360, CH); rv.quadraticCurveTo(200, 700, 300, 640); rv.quadraticCurveTo(420, 560, 220, 480); rv.closePath();
+      stitch(g, rv, ['#bcd2d8', '#d8e6e6'], 0.4, { box: [60, 480, 420, CH], sp: 2.4, len: 14, sheen: 60 });
+      for (var k = 0; k < 6; k++) { var sx = 100 + rnd() * 220, sy = 560 + rnd() * 200; radialStitch(g, ell(sx, sy, 20, 12), ['#6a6a5e', '#9a9a8a'], sx, sy, 20, { n: 50 }); }
+      pine(g, 60, 620, 1.0); pine(g, 360, 600, 1.0); } }];
+  /* ---------- 花鳥元件 ---------- */
+  function petal(g, cx, cy, ang, l, w, cols) { var x = cx + Math.cos(ang) * l * 0.5, y = cy + Math.sin(ang) * l * 0.5, pp = P(); pp.moveTo(cx, cy); pp.quadraticCurveTo(cx + Math.cos(ang - 0.6) * l * 0.8, cy + Math.sin(ang - 0.6) * l * 0.8, cx + Math.cos(ang) * l, cy + Math.sin(ang) * l); pp.quadraticCurveTo(cx + Math.cos(ang + 0.6) * l * 0.8, cy + Math.sin(ang + 0.6) * l * 0.8, cx, cy);
+    radialStitch(g, pp, cols, cx, cy, l, { n: 110, lw: 1.5, edge: 'rgba(255,245,245,.7)', a0: ang - 0.7, span: 1.4 }); }
+  function peony(g, cx, cy, r, cols) { var k, l;
+    for (l = 0; l < 4; l++) { var rr = r * (1 - l * 0.22), n = 9 - l; for (k = 0; k < n; k++) petal(g, cx + (rnd() - 0.5) * 6, cy + (rnd() - 0.5) * 6, k / n * TAU + l * 0.35 + rnd() * 0.3, rr, rr * 0.5, cols); }
+    for (k = 0; k < 18; k++) { g.fillStyle = '#e8b830'; g.beginPath(); g.arc(cx + (rnd() - 0.5) * r * 0.35, cy + (rnd() - 0.5) * r * 0.3, 2.4, 0, TAU); g.fill(); } }
+  function leaf(g, cx, cy, ang, l, w) { var p = P(), ex = cx + Math.cos(ang) * l, ey = cy + Math.sin(ang) * l; p.moveTo(cx, cy); p.quadraticCurveTo(cx + Math.cos(ang - 0.5) * l * 0.6, cy + Math.sin(ang - 0.5) * l * 0.6, ex, ey); p.quadraticCurveTo(cx + Math.cos(ang + 0.5) * l * 0.6, cy + Math.sin(ang + 0.5) * l * 0.6, cx, cy);
+    stitch(g, p, ['#2e5a3a', '#5a8a5a', '#9ab884'], ang + 0.7, { box: [cx - l, cy - l, cx + l, cy + l], sp: 1.6, len: 8, sheen: 6, radial: [cx, cy, l] });
+    g.strokeStyle = 'rgba(220,230,200,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(ang) * l, cy + Math.sin(ang) * l); g.stroke(); }
+  function branch(g, pts, w0, w1) { g.lineCap = 'round'; for (var i = 1; i < pts.length; i++) { var t = i / pts.length; g.strokeStyle = '#4a3428'; g.lineWidth = w0 + (w1 - w0) * t; g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][1]); g.lineTo(pts[i][0], pts[i][1]); g.stroke();
+      g.strokeStyle = 'rgba(160,120,90,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(pts[i - 1][0] + 2, pts[i - 1][1]); g.lineTo(pts[i][0] + 2, pts[i][1]); g.stroke(); } }
+  function blossom(g, x, y, r, pink) { for (var k = 0; k < 5; k++) { var a = k / 5 * TAU + rnd(); g.fillStyle = pink ? (k % 2 ? '#f2b8c6' : '#f8d4dc') : (k % 2 ? '#fbf4f2' : '#f2e2e2'); g.beginPath(); g.arc(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55, r * 0.5, 0, TAU); g.fill(); }
+    g.fillStyle = '#c8402e'; g.beginPath(); g.arc(x, y, r * 0.22, 0, TAU); g.fill(); g.fillStyle = '#f2c84a'; for (k = 0; k < 6; k++) { var b = rnd() * TAU; g.beginPath(); g.arc(x + Math.cos(b) * r * 0.35, y + Math.sin(b) * r * 0.35, 1.3, 0, TAU); g.fill(); } }
+  function bird(g, x, y, s, dir, cols) {   // magpie-like: dark body, white belly, long tail
+    var body = ell(x, y, 34 * s, 20 * s, dir * -0.3); stitch(g, body, cols.body, dir * -0.3, { box: [x - 40 * s, y - 25 * s, x + 40 * s, y + 25 * s], sp: 1.8, len: 6, sheen: 30 });
+    var belly = ell(x + dir * 6 * s, y + 8 * s, 18 * s, 10 * s, dir * -0.3); stitch(g, belly, ['#ffffff', '#e6e6ea'], 0.3, { box: [x - 30 * s, y - 10 * s, x + 30 * s, y + 25 * s], sp: 1.8, len: 5 });
+    var tail = P(); tail.moveTo(x - dir * 26 * s, y + 4 * s); tail.lineTo(x - dir * 110 * s, y + 70 * s); tail.lineTo(x - dir * 100 * s, y + 78 * s); tail.lineTo(x - dir * 22 * s, y + 14 * s); tail.closePath();
+    stitch(g, tail, cols.body, 0.6 * dir, { box: [x - 120 * s, y, x + 120 * s, y + 90 * s], sp: 1.8, len: 8 });
+    var hd = ell(x + dir * 32 * s, y - 14 * s, 14 * s, 13 * s); stitch(g, hd, [cols.body[0], cols.body[0]], 0, { box: [x - 60 * s, y - 40 * s, x + 60 * s, y], sp: 1.8, len: 5 });
+    g.fillStyle = '#222'; g.beginPath(); g.moveTo(x + dir * 44 * s, y - 16 * s); g.lineTo(x + dir * 58 * s, y - 12 * s); g.lineTo(x + dir * 44 * s, y - 10 * s); g.fill();
+    g.fillStyle = '#f2e6c8'; g.beginPath(); g.arc(x + dir * 36 * s, y - 17 * s, 2.6 * s, 0, TAU); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(x + dir * 36 * s, y - 17 * s, 1.4 * s, 0, TAU); g.fill(); }
+  function cloud(g, x, y, s, cols) { var p = P(); for (var k = 0; k < 3; k++) { p.moveTo(x + (k - 1) * 18 * s + 14 * s, y - (k === 1 ? 8 : 0) * s); p.arc(x + (k - 1) * 18 * s, y - (k === 1 ? 8 : 0) * s, 14 * s, 0, TAU); } radialStitch(g, p, cols.slice().reverse(), x, y, 34 * s, { n: 120, lw: 1.4, edge: rgb(hex(cols[0]), 0.9) });
+    g.strokeStyle = rgb(hex(cols[0]), 0.8); g.lineWidth = 2; g.beginPath(); for (var a = 0; a < 3 * Math.PI; a += 0.25) { var r = 9 * s * (1 - a / 10); g.lineTo(x + Math.cos(a) * r, y - 4 * s + Math.sin(a) * r); } g.stroke(); }
+  var BACK = [
+    { n: '牡丹富貴', d: '牡丹為花中之王，象徵富貴吉祥；紅、粉、白三色層層綻放。', draw: function (g) {
+      branch(g, [[200, 790], [190, 640], [150, 470]], 8, 4); branch(g, [[200, 720], [270, 580], [300, 420]], 6, 3); branch(g, [[195, 680], [90, 600], [70, 520]], 5, 3);
+      for (var k = 0; k < 26; k++) leaf(g, 50 + rnd() * 300, 300 + rnd() * 440, rnd() * TAU, 60 + rnd() * 40, 20);
+      peony(g, 140, 430, 92, ['#5a0a12', '#b8202a', '#e85a5a', '#fbd8d4']); peony(g, 300, 300, 78, ['#a02a5a', '#e070a0', '#fbd0e2']);
+      peony(g, 250, 560, 84, ['#e8d8d0', '#f8eeea', '#ffffff']); peony(g, 90, 640, 56, ['#a02a5a', '#e890b8', '#fde2ee']); peony(g, 330, 470, 46, ['#8a1a1e', '#d8303a', '#fbd0d0']);
+      for (k = 0; k < 4; k++) { var bx = 60 + rnd() * 280, by = 180 + rnd() * 120; var bp = ell(bx, by, 16, 22); stitch(g, bp, ['#3a6a3a', '#e070a0'], -1.5, { box: [bx - 20, by - 25, bx + 20, by + 25], sp: 1.6, len: 5, flip: true }); } } },
+    { n: '喜鵲登梅', d: '喜鵲報喜、梅花迎春，寓意「喜上眉梢」。', draw: function (g) {
+      branch(g, [[20, 790], [120, 620], [180, 520], [300, 380], [380, 300]], 14, 3); branch(g, [[180, 520], [90, 420], [60, 300]], 6, 2); branch(g, [[300, 380], [330, 200], [360, 120]], 5, 2);
+      var BR = [[[20, 790], [120, 620], [180, 520], [300, 380], [380, 300]], [[180, 520], [90, 420], [60, 300]], [[300, 380], [330, 200], [360, 120]]];
+      for (var k = 0; k < 70; k++) { var br = BR[k % 3], si = 1 + Math.floor(rnd() * (br.length - 1)), t = rnd(), a = br[si - 1], b = br[si];
+        blossom(g, a[0] + (b[0] - a[0]) * t + (rnd() - 0.5) * 34, a[1] + (b[1] - a[1]) * t + (rnd() - 0.5) * 30, 9 + rnd() * 5, rnd() < 0.55); }
+      var mg = { body: ['#14182a', '#2a3a6a', '#3a5a8a'] }; bird(g, 170, 470, 1.1, 1, mg); bird(g, 300, 340, 1.0, -1, mg); } },
+    { n: '丹鳳祥雲', d: '鳳凰為百鳥之王，祥雲環繞，象徵太平盛世。', draw: function (g) {
+      var cl = [['#7a9ad0', '#c8d8f0', '#eef2fa'], ['#d87a9a', '#f2c8d8', '#fbeef4'], ['#c8a040', '#f2dca0', '#fbf2d8']], k;
+      for (k = 0; k < 10; k++) cloud(g, 40 + rnd() * 320, 100 + rnd() * 640, 1.0 + rnd() * 0.6, cl[k % 3]);
+      // tail: five long S-curved plumes with eye spots
+      for (k = 0; k < 5; k++) { var a = -1.5 + k * 0.2, L = 300 + k * 18, sx = 170, sy = 470, pts = [], w0 = 16, j;
+        for (j = 0; j <= 16; j++) { var t = j / 16, ang = a + Math.sin(t * 3.2) * 0.35; pts.push([sx + Math.cos(ang) * L * t + 40 * Math.sin(t * 3.1), sy + Math.sin(ang) * L * t]); }
+        var tp = P(); for (j = 0; j <= 16; j++) { var w = w0 * (0.4 + 0.6 * Math.sin(j / 16 * Math.PI)); tp.lineTo(pts[j][0] - w, pts[j][1]); } for (j = 16; j >= 0; j--) { var w2 = w0 * (0.4 + 0.6 * Math.sin(j / 16 * Math.PI)); tp.lineTo(pts[j][0] + w2, pts[j][1]); } tp.closePath();
+        stitch(g, tp, k % 2 ? ['#c83a2a', '#e8a040', '#f2d070'] : ['#2a4a9a', '#4a8ac0', '#d8b040'], a - 0.4, { box: [0, 0, CW, 600], sp: 1.6, len: 8, sheen: 30, flip: true });
+        var e = pts[16]; g.fillStyle = '#c83a2a'; g.beginPath(); g.ellipse(e[0], e[1], 15, 11, a, 0, TAU); g.fill(); g.fillStyle = '#2a5ab0'; g.beginPath(); g.ellipse(e[0], e[1], 9, 7, a, 0, TAU); g.fill(); g.fillStyle = '#f2d070'; g.beginPath(); g.arc(e[0], e[1], 3.5, 0, TAU); g.fill(); }
+      // wings: layered feathers
+      for (var side = 0; side < 2; side++) for (k = 0; k < 9; k++) { var fa = (side ? -2.3 : -0.9) + k * 0.13 * (side ? -1 : 1), fl = 120 + k * 9 - side * 30, fx = 190, fy = 470;
+        var fp = P(); fp.moveTo(fx, fy); fp.quadraticCurveTo(fx + Math.cos(fa - 0.12) * fl * 0.6, fy + Math.sin(fa - 0.12) * fl * 0.6, fx + Math.cos(fa) * fl, fy + Math.sin(fa) * fl); fp.quadraticCurveTo(fx + Math.cos(fa + 0.12) * fl * 0.6, fy + Math.sin(fa + 0.12) * fl * 0.6, fx, fy);
+        stitch(g, fp, side ? ['#c8a040', '#e86a3a', '#2a4a9a'] : ['#d8b040', '#3a6ab0', '#c83a2a'], fa, { box: [fx - fl, fy - fl, fx + fl, fy + fl], sp: 1.5, len: 7, sheen: 10, radial: [fx, fy, fl] }); }
+      var bd = ell(200, 500, 46, 30, -0.4); stitch(g, bd, ['#e8b040', '#c8502a'], -0.4, { box: [150, 465, 250, 535], sp: 1.5, len: 5 });
+      var nk = P(); nk.moveTo(225, 485); nk.quadraticCurveTo(275, 470, 268, 560); nk.lineTo(252, 562); nk.quadraticCurveTo(255, 500, 218, 505); nk.closePath(); stitch(g, nk, ['#c83a2a', '#e8b830'], 1.3, { box: [210, 465, 280, 570], sp: 1.5, len: 5 });
+      g.fillStyle = '#c8302a'; g.beginPath(); g.arc(262, 566, 13, 0, TAU); g.fill(); g.fillStyle = '#e8b830'; g.beginPath(); g.moveTo(270, 574); g.lineTo(288, 580); g.lineTo(270, 582); g.fill(); g.fillStyle = '#111'; g.beginPath(); g.arc(264, 563, 2.4, 0, TAU); g.fill();
+      for (k = 0; k < 3; k++) { g.strokeStyle = '#c83a2a'; g.lineWidth = 3; g.beginPath(); g.moveTo(258, 556); g.quadraticCurveTo(250 - k * 8, 536, 240 - k * 10, 530 - k * 4); g.stroke(); } } },
+    { n: '松鶴延年', d: '蒼松、仙鶴皆為長壽象徵，祝福延年益壽。', draw: function (g) {
+      ridge(g, 0, CW, 420, [[100, 330], [300, 300]], FAR, -1.3, true);
+      branch(g, [[40, 790], [70, 560], [60, 380], [120, 240]], 16, 6); branch(g, [[66, 480], [200, 430], [330, 440]], 6, 3);
+      for (var k = 0; k < 6; k++) { var bx = 60 + rnd() * 300, by = 220 + rnd() * 240; radialStitch(g, ell(bx, by, 50, 18), ['#1e3a2c', '#2f5a42', '#5a8a62'], bx, by, 50, { n: 140, lw: 1.3 }); }
+      for (var c = 0; c < 2; c++) { var cx = 230 + c * 80, cy = 560 + c * 70, s = c ? 0.9 : 1.1;
+        stitch(g, ell(cx, cy, 44 * s, 24 * s, -0.2), ['#ffffff', '#ececf0'], -0.2, { box: [cx - 50, cy - 30, cx + 50, cy + 30], sp: 1.8, len: 6 });
+        var tl = ell(cx - 40 * s, cy + 6 * s, 20 * s, 12 * s, 0.4); stitch(g, tl, ['#1a1a1a', '#3a3a3a'], 0.4, { box: [cx - 70, cy - 20, cx, cy + 30], sp: 1.8, len: 5 });
+        g.strokeStyle = '#1a1a1a'; g.lineWidth = 6 * s; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx + 34 * s, cy - 8 * s); g.quadraticCurveTo(cx + 60 * s, cy - 50 * s, cx + 46 * s, cy - 84 * s); g.stroke();
+        g.fillStyle = '#f2f2f2'; g.beginPath(); g.arc(cx + 46 * s, cy - 88 * s, 9 * s, 0, TAU); g.fill(); g.fillStyle = '#d02a22'; g.beginPath(); g.arc(cx + 46 * s, cy - 95 * s, 5 * s, 0, TAU); g.fill();
+        g.strokeStyle = '#c8a050'; g.lineWidth = 3 * s; g.beginPath(); g.moveTo(cx + 52 * s, cy - 88 * s); g.lineTo(cx + 74 * s, cy - 82 * s); g.stroke();
+        g.strokeStyle = '#3a3a3a'; g.lineWidth = 2.5 * s; g.beginPath(); g.moveTo(cx, cy + 20 * s); g.lineTo(cx - 6 * s, cy + 90 * s); g.moveTo(cx + 10 * s, cy + 20 * s); g.lineTo(cx + 14 * s, cy + 90 * s); g.stroke(); } } },
+    { n: '荷塘清趣', d: '荷花出淤泥而不染，象徵君子清廉高潔。', draw: function (g) {
+      water(g, 560, CH, 0, CW);
+      for (var k = 0; k < 5; k++) { var x = 40 + rnd() * 320, y = 300 + rnd() * 340; g.strokeStyle = '#4a6a3a'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 30, CH); g.stroke();
+        var lf = ell(x, y, 66, 28, (rnd() - 0.5) * 0.4); radialStitch(g, lf, ['#8aaa6a', '#4a7a4a', '#2e5a3a'], x, y, 66, { n: 200, lw: 1.5, edge: 'rgba(30,60,30,.8)' });
+        g.strokeStyle = 'rgba(200,220,170,.6)'; g.lineWidth = 1; for (var v = 0; v < 9; v++) { var va = v / 9 * TAU; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(va) * 60, y + Math.sin(va) * 24); g.stroke(); } }
+      for (k = 0; k < 3; k++) { var fx = 90 + k * 110, fy = 200 + rnd() * 160; g.strokeStyle = '#4a6a3a'; g.lineWidth = 3; g.beginPath(); g.moveTo(fx, fy + 30); g.lineTo(fx + (rnd() - 0.5) * 20, CH); g.stroke();
+        for (var p = 0; p < 7; p++) petal(g, fx, fy + 20, -Math.PI / 2 + (p - 3) * 0.32, 56, 18, ['#fbe8ee', '#f2a0b8', '#d85a80']); } } },
+    { n: '竹報平安', d: '竹節節高升、四季常青，「竹報平安」寄寓家宅安康。', draw: function (g) {
+      for (var k = 0; k < 4; k++) { var x = 70 + k * 85 + rnd() * 20; for (var y = CH; y > 40 + k * 30; y -= 90) { var p = P(); p.rect(x - 9, y - 86, 18, 84); stitch(g, p, ['#3a6a3a', '#6a9a5a', '#a8c88a'], Math.PI / 2, { box: [x - 10, y - 90, x + 10, y], sp: 1.6, len: 12, sheen: 8 });
+          g.fillStyle = '#2a4a2a'; g.fillRect(x - 11, y - 4, 22, 5); }
+        for (var j = 0; j < 7; j++) { var ly = 80 + rnd() * 500; var dir = rnd() < 0.5 ? -1 : 1; for (var q = 0; q < 3; q++) { var a = dir < 0 ? Math.PI - 0.3 - q * 0.35 : 0.3 + q * 0.35; var p2 = P(), L = 60 + rnd() * 20;
+          p2.moveTo(x, ly); p2.quadraticCurveTo(x + Math.cos(a - 0.15) * L * 0.5, ly + Math.sin(a - 0.15) * L * 0.5 + 6, x + Math.cos(a) * L, ly + Math.sin(a) * L); p2.quadraticCurveTo(x + Math.cos(a + 0.15) * L * 0.5, ly + Math.sin(a + 0.15) * L * 0.5 - 6, x, ly);
+          stitch(g, p2, ['#1e3a24', '#3a6a3a'], a, { box: [x - 90, ly - 90, x + 90, ly + 90], sp: 1.6, len: 8, sheen: 4 }); } } } } }];
+  /* ---------- 畫布 ---------- */
+  function canvasTex(draw, name, tint) { var c = document.createElement('canvas'); c.width = CW; c.height = CH; var g = c.getContext('2d'); silk(g, CW, CH, tint); draw(g);
+    title(g, name, CW - 30, 50, 24); seal(g, CW - 44, 54 + name.length * 27, 28, ['尼', '山']);
+    var t = new THREE.CanvasTexture(c); if (opt.colorSpace) t.colorSpace = opt.colorSpace; t.anisotropy = 4; return t; }
+  function woodTex(w, h, fn) { var c = document.createElement('canvas'); c.width = w; c.height = h; var g = c.getContext('2d'); g.fillStyle = '#3a1a12'; g.fillRect(0, 0, w, h);
+    for (var i = 0; i < 300; i++) { g.fillStyle = 'rgba(' + (60 + rnd() * 40 | 0) + ',' + (24 + rnd() * 16 | 0) + ',' + (16 + rnd() * 10 | 0) + ',.35)'; g.fillRect(0, rnd() * h, w, 1 + rnd() * 2); }
+    if (fn) fn(g, w, h); var t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; if (opt.colorSpace) t.colorSpace = opt.colorSpace; return t; }
+  function huiwen(g, x, y, s, col) { g.strokeStyle = col; g.lineWidth = s * 0.14; g.beginPath(); g.moveTo(x, y + s); g.lineTo(x, y); g.lineTo(x + s, y); g.lineTo(x + s, y + s * 0.8); g.lineTo(x + s * 0.3, y + s * 0.8); g.lineTo(x + s * 0.3, y + s * 0.3); g.lineTo(x + s * 0.65, y + s * 0.3); g.lineTo(x + s * 0.65, y + s * 0.55); g.stroke(); }
+  var frameTex = woodTex(256, 32, function (g, w, h) { for (var x = 4; x < w; x += 30) { huiwen(g, x, 5, 22, 'rgba(200,150,80,.55)'); } });
+  var apronTex = woodTex(256, 128, function (g, w, h) { g.strokeStyle = 'rgba(210,160,90,.6)'; g.lineWidth = 3; g.strokeRect(10, 10, w - 20, h - 20);
+    for (var k = 0; k < 2; k++) { var cx = w / 2 + (k ? 50 : -50), cy = h / 2; g.beginPath(); for (var a = 0; a < 4 * Math.PI; a += 0.2) { var r = 30 * (1 - a / 14); g.lineTo(cx + (k ? -1 : 1) * Math.cos(a) * r, cy + Math.sin(a) * r); } g.stroke(); }
+    g.beginPath(); g.ellipse(w / 2, h / 2, 18, 12, 0, 0, TAU); g.stroke(); g.beginPath(); g.moveTo(w / 2 - 30, h / 2); g.quadraticCurveTo(w / 2, h / 2 - 30, w / 2 + 30, h / 2); g.stroke(); });
+  var L = function (o) { return new THREE.MeshLambertMaterial(o); };
+  var wood = L({ map: frameTex }), woodPlain = L({ color: 0x3a1c12 }), apron = L({ map: apronTex }), gold = L({ color: 0xc89a48, emissive: 0x2a1800 });
+  /* ---------- 六扇折屏 ---------- */
+  var group = new THREE.Group(), panels = [], N = 6, PW = opt.panelW || 3.3, ANG = opt.fold === undefined ? 0.2 : opt.fold;
+  var H = opt.height || 8.0, SW = PW - 0.4, SH = H * 0.66, sy = H * 0.24 + SH / 2;   // silk area
+  var span = N * PW * Math.cos(ANG), x0 = -span / 2;
+  function box(p, w, h, d, m, x, y, z) { var o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); p.add(o); return o; }
+  for (var i = 0; i < N; i++) {
+    var pg = new THREE.Group(); pg.position.set(x0 + (i + 0.5) * PW * Math.cos(ANG), 0, 0); pg.rotation.y = i % 2 ? ANG : -ANG; group.add(pg);   // zigzag: hinges alternate front/back
+    // frame: stiles, rails, crest, apron, feet
+    var T = 0.16, D = 0.14;
+    box(pg, T, H, D, wood, -PW / 2 + T / 2, H / 2, 0); box(pg, T, H, D, wood, PW / 2 - T / 2, H / 2, 0);
+    box(pg, PW, T, D, wood, 0, H - T / 2, 0); box(pg, PW, T, D, wood, 0, sy + SH / 2 + T / 2, 0); box(pg, PW, T, D, wood, 0, sy - SH / 2 - T / 2, 0); box(pg, PW, T, D, wood, 0, 0.42, 0);
+    var ap = box(pg, PW - 2 * T, sy - SH / 2 - T - 0.42 - T / 2, 0.06, apron, 0, (sy - SH / 2 - T + 0.42 + T / 2) / 2, 0);
+    box(pg, PW - 2 * T, H - T - (sy + SH / 2 + T), 0.06, apron, 0, (H - T + sy + SH / 2 + T) / 2, 0);
+    var cr = new THREE.Shape(); cr.moveTo(-PW / 2, 0); cr.lineTo(-PW / 2, 0.12); cr.quadraticCurveTo(-PW / 4, 0.12, -PW / 8, 0.32); cr.quadraticCurveTo(0, 0.5, PW / 8, 0.32); cr.quadraticCurveTo(PW / 4, 0.12, PW / 2, 0.12); cr.lineTo(PW / 2, 0); cr.closePath();
+    var cg = new THREE.ExtrudeGeometry(cr, { depth: 0.12, bevelEnabled: false }); cg.translate(0, H, -0.06); pg.add(new THREE.Mesh(cg, woodPlain));
+    var pearl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), gold); pearl.position.set(0, H + 0.48, 0); pg.add(pearl);
+    for (var s = -1; s <= 1; s += 2) { box(pg, 0.3, 0.12, 0.5, woodPlain, s * (PW / 2 - 0.25), 0.06, 0); }
+    // hinges
+    if (i) { box(pg, 0.06, 0.22, 0.18, gold, -PW / 2, H * 0.8, 0); box(pg, 0.06, 0.22, 0.18, gold, -PW / 2, H * 0.3, 0); }
+    // silk faces (front +z, back -z) and a soft glow plane between for backlit translucency
+    var ft = canvasTex(FRONT[i].draw, FRONT[i].n), bt = canvasTex(BACK[i].draw, BACK[i].n, '#f2e8d6');
+    var fm = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), L({ map: ft, emissive: 0xffffff, emissiveMap: ft, emissiveIntensity: 0.12 })); fm.position.set(0, sy, 0.02); pg.add(fm);
+    var bm = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), L({ map: bt, emissive: 0xffffff, emissiveMap: bt, emissiveIntensity: 0.12 })); bm.position.set(0, sy, -0.02); bm.rotation.y = Math.PI; pg.add(bm);
+    var info = { i: i, front: FRONT[i], back: BACK[i], fm: fm, bm: bm, glow: 0 };
+    pg.traverse(function (o) { o.userData.screenPanel = info; });
+    panels.push(info);
+  }
+  function hit(p, side) { if (!p) return; p.glow = 1; }
+  function tick(dt) { for (var i = 0; i < panels.length; i++) { var p = panels[i]; if (p.glow > 0) { p.glow = Math.max(0, p.glow - dt * 0.35); } var e = 0.12 + p.glow * 0.55; p.fm.material.emissiveIntensity = e; p.bm.material.emissiveIntensity = e; } }
+  return { group: group, panels: panels, tick: tick, hit: hit, width: span, height: H };
+}
