@@ -1,10 +1,10 @@
 # model3d — 3D 模型庫
 
-為「尼山聖境・大學堂 3D 導覽」（[kftseng2oo1/conlns](https://github.com/kftseng2oo1/conlns)）製作的原創程式生成模型，全部匯出成 **glTF 2.0 二進位（.glb）**，可直接放進 three.js、Blender、Unity、Unreal、Godot、model-viewer 等軟體使用。
+為「尼山聖境・大學堂 3D 導覽」（[kftseng2oo1/conlns](https://github.com/kftseng2oo1/conlns)）與「故鄉魚塭」（[kftseng2oo1/fish-pond](https://github.com/kftseng2oo1/fish-pond)）製作的原創程式生成模型，全部匯出成 **glTF 2.0 二進位（.glb）**，可直接放進 three.js、Blender、Unity、Unreal、Godot、model-viewer 等軟體使用。
 
 - **模型總覽**：開啟 `index.html`（啟用 GitHub Pages 後即為網站首頁），每張卡片可 3D 檢視、播放動畫、下載 .glb
 - **互動版**：`pages/` 底下是各模型的原始製作頁，可以點擊互動，也能從頁面重新匯出 .glb
-- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型、雙面繡屏風、銅鑄童子的產生程式（ES5，three.js r147–r160 皆可用）
+- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型、雙面繡屏風、銅鑄童子、魚塭三寶（aquaculture.js）的產生程式（ES5，three.js r147–r160 皆可用）
 
 ## 模型清單
 
@@ -29,6 +29,9 @@
 | 雙面繡屏風 | 禮器 | 六扇折屏、紫檀回紋框；正面尼山六景、背面吉祥花鳥（雙面異繡） | [`screen.glb`](models/screen.glb) | 0.86 MB | — | [互動版](pages/screen.html) |
 | 童子舉鼓 | 人物 | 銅鑄童子：總角雙髻、交領短衫，雙手把鼓高舉過頭 | [`tongzi-jugu.glb`](models/tongzi-jugu.glb) | 0.92 MB | — | [互動版](pages/tongzi.html) |
 | 童子擊鼓 | 人物 | 銅鑄童子：鼓架前弓步，雙手持槌擊鼓 | [`tongzi-jigu.glb`](models/tongzi-jigu.glb) | 1.0 MB | — | [互動版](pages/tongzi.html) |
+| 虱目魚 | 魚塭 | 側扁紡錘形、背藍綠腹銀白、細密圓鱗、深叉形大尾鰭 | [`milkfish.glb`](models/milkfish.glb) | 1.02 MB | Swim / Idle / Jump | [互動版](pages/aquaculture.html) |
+| 草蝦 | 魚塭 | 斑節蝦：深褐體色帶黃白橫帶、鋸齒額角、長觸鬚、藍黃紅尾扇 | [`tiger-prawn.glb`](models/tiger-prawn.glb) | 1.04 MB | Idle / Walk / Swim / Flick | [互動版](pages/aquaculture.html) |
+| 文蛤 | 魚塭 | 台灣文蛤：圓三角形光滑殼、褐色鋸齒花紋，會開殼伸水管、伸斧足鑽沙 | [`hard-clam.glb`](models/hard-clam.glb) | 2.16 MB | Idle / Filter / Open / Snap / Dig | [互動版](pages/aquaculture.html) |
 
 ## 使用說明
 
@@ -47,5 +50,5 @@ models.json     模型清單（名稱、說明、大小、動畫）
 icons/          網站圖示（SVG 原檔與各尺寸 PNG）
 manifest.json   加到主畫面用的設定
 pages/          各模型的互動製作頁
-src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js、screen.js、tongzi.js）
+src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js、screen.js、tongzi.js、aquaculture.js）
 ```

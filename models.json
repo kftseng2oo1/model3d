@@ -224,5 +224,47 @@
   "g": "人物",
   "size": 1.0,
   "anims": []
+ },
+ {
+  "k": "milkfish",
+  "t": "虱目魚",
+  "d": "側扁紡錘形、背藍綠腹銀白、細密圓鱗、深叉形大尾鰭",
+  "p": "pages/aquaculture.html",
+  "g": "魚塭",
+  "size": 1.02,
+  "anims": [
+   "Swim",
+   "Idle",
+   "Jump"
+  ]
+ },
+ {
+  "k": "tiger-prawn",
+  "t": "草蝦",
+  "d": "斑節蝦：深褐體色帶黃白橫帶、鋸齒額角、長觸鬚、藍黃紅尾扇",
+  "p": "pages/aquaculture.html",
+  "g": "魚塭",
+  "size": 1.04,
+  "anims": [
+   "Idle",
+   "Walk",
+   "Swim",
+   "Flick"
+  ]
+ },
+ {
+  "k": "hard-clam",
+  "t": "文蛤",
+  "d": "台灣文蛤：圓三角形光滑殼、褐色鋸齒花紋，會開殼伸水管、伸斧足鑽沙",
+  "p": "pages/aquaculture.html",
+  "g": "魚塭",
+  "size": 2.16,
+  "anims": [
+   "Idle",
+   "Filter",
+   "Open",
+   "Snap",
+   "Dig"
+  ]
  }
 ]

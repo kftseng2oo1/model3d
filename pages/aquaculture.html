@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>魚塭三寶・虱目魚 草蝦 文蛤</title>
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#1c302d;font-family:-apple-system,"PingFang TC","Noto Serif TC",serif;color:#eef3e6;touch-action:none}
+#top{position:fixed;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top) + 12px) 14px 8px;background:linear-gradient(#142421e8,#14242100);pointer-events:none}
+#top h1{margin:0;font-size:21px;letter-spacing:5px}#top p{margin:3px 0 0;font-size:12px;opacity:.7}
+#top a{pointer-events:auto;position:absolute;right:14px;top:calc(env(safe-area-inset-top) + 14px);color:#e6c870;text-decoration:none;font-size:14px;border:1px solid #e6c87066;border-radius:16px;padding:4px 11px}
+#tabs{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 68px);display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 10px}
+button{font-family:inherit;border:1px solid #e6c87077;background:#1f332fe6;color:#eef3e6;border-radius:18px;padding:7px 14px;font-size:14px}
+button.on{background:#e0bd5a;color:#1a1408;border-color:#e0bd5a}
+#panel{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 12px);display:flex;flex-direction:column;align-items:center;gap:9px;padding:0 10px}
+#info{max-width:560px;font-size:13.5px;line-height:1.65;background:#142421d9;border:1px solid #e6c87033;border-radius:12px;padding:9px 13px;text-shadow:none}
+#info b{color:#f0d27c;letter-spacing:2px}
+#acts{display:flex;gap:7px;flex-wrap:wrap;justify-content:center}
+#acts button{font-size:13px;padding:6px 12px}
+#acts .dl{border-color:#9fd0c0;color:#bff0de}
+#toast{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);background:#000b;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script src="../src/aquaculture.js"></script>
+</head><body>
+<div id="top"><h1>魚塭三寶</h1><p>虱目魚・草蝦・文蛤　點一下生物看牠的反應</p><a href="../index.html">模型庫</a></div>
+<div id="tabs"></div>
+<div id="panel"><div id="info"></div><div id="acts"></div></div>
+<div id="toast"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();const WATER=new THREE.Color(0x2f5550);scene.background=WATER;scene.fog=new THREE.FogExp2(WATER,0.42);
+scene.environment=new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(),0.04).texture;scene.environmentIntensity=0.55;
+const camera=new THREE.PerspectiveCamera(40,innerWidth/innerHeight,0.005,60);camera.position.set(0.9,0.55,1.25);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,0.12,0);controls.maxPolarAngle=Math.PI*0.53;controls.minDistance=0.08;controls.maxDistance=4;
+scene.add(new THREE.HemisphereLight(0xd8f0e6,0x40362a,1.1));
+const sun=new THREE.DirectionalLight(0xfff4dc,2.4);sun.position.set(0.8,3,1.2);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-1.5,right:1.5,top:1.5,bottom:-1.5,near:0.5,far:6});sun.shadow.bias=-0.0004;scene.add(sun);
+
+// 池底：泥沙
+const fg=new THREE.PlaneGeometry(8,8,160,160);fg.rotateX(-Math.PI/2);
+{const p=fg.attributes.position,c=new Float32Array(p.count*3),a=new THREE.Color(0x7d6a4c),b=new THREE.Color(0x5a4a36),k=new THREE.Color();
+ for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),n=Math.sin(x*9.1+Math.sin(z*7.3))*0.5+Math.sin(z*13.7+x*3.1)*0.3+Math.sin(x*31+z*27)*0.2;p.setY(i,n*0.006-0.002);
+  k.copy(a).lerp(b,0.5+0.5*Math.sin(x*5.3+z*4.1+n));c.set([k.r,k.g,k.b],i*3);}
+ fg.setAttribute('color',new THREE.BufferAttribute(c,3));fg.computeVertexNormals();}
+const floor=new THREE.Mesh(fg,new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}));floor.receiveShadow=true;scene.add(floor);
+for(let i=0;i<40;i++){const s=new THREE.Mesh(new THREE.DodecahedronGeometry(1,0),new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.08,0.15,0.25+Math.random()*0.2),roughness:1}));
+  const r=0.004+Math.random()*0.012;s.scale.set(r,r*0.6,r*1.2);const a=Math.random()*6.28,d=0.15+Math.random()*1.4;s.position.set(Math.cos(a)*d,r*0.2,Math.sin(a)*d);s.rotation.set(Math.random(),Math.random(),0);s.castShadow=s.receiveShadow=true;scene.add(s);}
+// 水中懸浮微粒
+const snowN=500,sg=new THREE.BufferGeometry(),sp=new Float32Array(snowN*3);for(let i=0;i<snowN;i++){sp[i*3]=(Math.random()-0.5)*4;sp[i*3+1]=Math.random()*1.5;sp[i*3+2]=(Math.random()-0.5)*4;}
+sg.setAttribute('position',new THREE.BufferAttribute(sp,3));const snow=new THREE.Points(sg,new THREE.PointsMaterial({color:0xd8eadf,size:0.006,transparent:true,opacity:0.5,depthWrite:false}));scene.add(snow);
+
+const AQ=makeAquaculture(THREE);
+const SPOT={milkfish:new THREE.Vector3(0,0.32,0),prawn:new THREE.Vector3(0.22,0,0.16),clam:new THREE.Vector3(-0.16,0,0.2)};
+const DEF={milkfish:'Swim',prawn:'Walk',clam:'Filter'},TAP={milkfish:'Jump',prawn:'Flick',clam:'Snap'};
+const NAMES={milkfish:'虱目魚',prawn:'草蝦',clam:'文蛤'};
+const LABEL={Swim:'游動',Idle:'休息',Jump:'躍出水面',Walk:'爬行',Flick:'彈尾後退',Filter:'開殼濾食',Open:'開殼',Snap:'受驚閉殼',Dig:'斧足鑽沙'};
+const INFO={milkfish:'<b>虱目魚</b>　廣鹽性魚類，台灣南部魚塭的主角。身體側扁呈紡錘形，背部藍綠、腹部銀白，滿布細小圓鱗；吻尖口小，以藻類為主食。深叉形的大尾鰭讓牠游得又快又穩，受驚或搶食時會躍出水面。',
+  prawn:'<b>草蝦</b>（斑節蝦）　體色深褐近黑，腹節有黃白色橫帶，所以又叫「斑節蝦」。額角上緣七齒、下緣三齒；靠五對步足在池底爬行，用腹部的游泳足划水，受驚時腹部猛力一彎就會「彈」向後方。',
+  clam:'<b>文蛤</b>（台灣文蛤）　殼呈圓三角形、光滑有光澤，灰白底帶褐色鋸齒花紋，每顆花紋都不一樣。半埋在沙裡，開殼伸出入水管與出水管濾食藻類；用斧足鑽沙移動，一受驚就立刻閉殼噴水。'};
+const ani={};
+let focus='all';const tabs=document.getElementById('tabs'),acts=document.getElementById('acts'),info=document.getElementById('info');
+for(const k of ['milkfish','prawn','clam']){
+  const r=AQ.rig(k),holder=new THREE.Group();holder.add(r.root);holder.position.copy(SPOT[k]);holder.userData.kind=k;scene.add(holder);
+  r.root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.userData.kind=k;}});
+  const mixer=new THREE.AnimationMixer(r.root),acts={};r.clips.forEach(c=>acts[c.name]=mixer.clipAction(c));
+  ani[k]={holder,root:r.root,mixer,acts,clips:r.clips,cur:null};
+  mixer.addEventListener('finished',e=>{if(e.action===ani[k].cur&&e.action.loop===THREE.LoopOnce)play(k,DEF[k]);});
+  play(k,DEF[k]);
+}
+ani.milkfish.holder.rotation.y=Math.PI/2;ani.clam.holder.rotation.y=Math.PI/2+0.35;
+function play(k,name){const A=ani[k],a=A.acts[name];if(!a)return;const once=name===TAP[k]||name==='Open'||name==='Dig';
+  a.reset();a.setLoop(once?THREE.LoopOnce:THREE.LoopRepeat,Infinity);a.clampWhenFinished=once;
+  if(A.cur&&A.cur!==a){a.crossFadeFrom(A.cur,name==='Snap'||name==='Flick'?0.05:0.35,false);}a.play();A.cur=a;A.name=name;drawActs();}
+
+// 分頁
+[['all','全部'],['milkfish','虱目魚'],['prawn','草蝦'],['clam','文蛤']].forEach(([k,t])=>{const b=document.createElement('button');b.textContent=t;b.dataset.k=k;b.onclick=()=>setFocus(k);tabs.appendChild(b);});
+const VIEW={all:[0.85,0.55,1.2,0,0.12,0.05],milkfish:[0.55,0.42,0.75,0,0.32,0],prawn:[0.38,0.2,0.42,0.22,0.035,0.16],clam:[-0.04,0.09,0.32,-0.16,0.025,0.2]};
+let camGoal=null;
+function setFocus(k){focus=k;[...tabs.children].forEach(b=>b.classList.toggle('on',b.dataset.k===k));const v=VIEW[k];camGoal={p:new THREE.Vector3(v[0],v[1],v[2]),t:new THREE.Vector3(v[3],v[4],v[5]),k:0};
+  info.innerHTML=k==='all'?'池底有三種一起混養的生物。點上方分頁可近看，點生物本身會看到牠的反應（虱目魚躍水、草蝦彈尾、文蛤閉殼）。':INFO[k];drawActs();}
+function drawActs(){acts.innerHTML='';const ks=focus==='all'?[]:[focus];
+  ks.forEach(k=>{ani[k].clips.forEach(c=>{const b=document.createElement('button');b.textContent=LABEL[c.name]||c.name;if(ani[k].name===c.name)b.className='on';b.onclick=()=>play(k,c.name);acts.appendChild(b);});
+    const d=document.createElement('button');d.className='dl';d.textContent='下載 .glb';d.onclick=()=>download(k);acts.appendChild(d);});
+  if(focus==='all'){const d=document.createElement('button');d.className='dl';d.textContent='下載三個 .glb';d.onclick=async()=>{for(const k of ['milkfish','prawn','clam'])await download(k);};acts.appendChild(d);}}
+setFocus('all');
+
+// 點選
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};});
+addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down.x,e.clientY-down.y)>8){down=null;return;}down=null;
+  ndc.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ndc,camera);
+  const h=ray.intersectObjects(Object.values(ani).map(a=>a.holder),true)[0];if(h){const k=h.object.userData.kind;if(k){play(k,TAP[k]);if(focus!==k&&focus!=='all')setFocus(k);}}});
+
+// 匯出 .glb
+const FILE={milkfish:'milkfish.glb',prawn:'tiger-prawn.glb',clam:'hard-clam.glb'};
+function exportGLB(k){const r=AQ.rig(k),s=new THREE.Scene();s.add(r.root);
+  return new Promise((res,rej)=>new GLTFExporter().parse(s,res,rej,{binary:true,maxTextureSize:2048,animations:r.clips}));}
+window.__exportGLB=async k=>{const u=new Uint8Array(await exportGLB(k));let bin='';for(let i=0;i<u.length;i+=0x8000)bin+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(bin);};
+window.__play=(k,n)=>play(k,n);window.__focus=k=>{setFocus(k);if(k!=='all'){ani.milkfish.holder.position.copy(SPOT.milkfish);ani.milkfish.holder.rotation.y=Math.PI/2;ani.prawn.holder.position.copy(SPOT.prawn);ani.prawn.holder.rotation.y=Math.PI/2;}if(camGoal){camera.position.copy(camGoal.p);controls.target.copy(camGoal.t);camGoal=null;}};window.__cam=(x,y,z,tx,ty,tz)=>{camGoal=null;camera.position.set(x,y,z);controls.target.set(tx,ty,tz);};
+window.__freeze=t=>{frozen=t;};window.__pose=(k,n,t)=>{const A=ani[k];A.mixer.stopAllAction();if(n){const a=A.acts[n];a.reset().play();A.mixer.update(t);}else A.mixer.update(0);frozen=1;};let frozen=null;
+const toastEl=document.getElementById('toast');function toast(m){toastEl.textContent=m;toastEl.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>toastEl.classList.remove('show'),2500);}
+async function download(k){toast('正在產生 '+NAMES[k]+' 模型…');try{const buf=await exportGLB(k);const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([buf],{type:'model/gltf-binary'}));a.download=FILE[k];document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);toast('已下載 '+FILE[k]);}catch(e){toast('匯出失敗：'+e.message);}}
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+const clock=new THREE.Clock();let T=0;
+(function loop(){requestAnimationFrame(loop);let dt=Math.min(clock.getDelta(),0.05);if(frozen!==null)dt=0;T+=dt;
+  for(const k in ani)ani[k].mixer.update(dt);
+  // 全部模式：虱目魚繞圈游、草蝦慢慢爬
+  const f=ani.milkfish.holder,pr=ani.prawn.holder;
+  if(focus==='all'){const a=T*0.35,R=0.55;f.position.set(Math.cos(a)*R,0.32+0.03*Math.sin(T*0.7),Math.sin(a)*R);f.rotation.y=-a;
+    if(ani.prawn.name==='Walk'){const b=T*0.06;pr.position.set(0.22+Math.cos(b)*0.12,0,0.16+Math.sin(b)*0.12);pr.rotation.y=-b;}}
+  else{f.position.lerp(SPOT.milkfish,0.05);f.rotation.y+=(Math.PI/2-f.rotation.y)*0.05;pr.position.lerp(SPOT.prawn,0.05);pr.rotation.y+=(Math.PI/2-pr.rotation.y)*0.05;}
+  const p=snow.geometry.attributes.position;for(let i=0;i<snowN;i++){let y=p.getY(i)-dt*0.01;if(y<0)y=1.5;p.setY(i,y);}p.needsUpdate=true;
+  if(camGoal){camGoal.k=Math.min(1,camGoal.k+dt*1.6);const s=camGoal.k*camGoal.k*(3-2*camGoal.k);camera.position.lerp(camGoal.p,s*0.25);controls.target.lerp(camGoal.t,s*0.25);if(camGoal.k>=1)camGoal=null;}
+  controls.update();renderer.render(scene,camera);})();
+</script></body></html>
