@@ -41,6 +41,8 @@ index.html      模型總覽（卡片、3D 檢視、下載）
 viewer.html     單一模型檢視器：viewer.html?m=<名稱>
 models/         所有 .glb
 models.json     模型清單（名稱、說明、大小、動畫）
+icons/          網站圖示（SVG 原檔與各尺寸 PNG）
+manifest.json   加到主畫面用的設定
 pages/          各模型的互動製作頁
 src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js）
 ```
