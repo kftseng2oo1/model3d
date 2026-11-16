@@ -4,7 +4,7 @@
 
 - **模型總覽**：開啟 `index.html`（啟用 GitHub Pages 後即為網站首頁），每張卡片可 3D 檢視、播放動畫、下載 .glb
 - **互動版**：`pages/` 底下是各模型的原始製作頁，可以點擊互動，也能從頁面重新匯出 .glb
-- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型、雙面繡屏風的產生程式（ES5，three.js r147–r160 皆可用）
+- **程式模型原始碼**：`src/` 為杏樹、鐘鼓、弟子四型、雙面繡屏風、銅鑄童子的產生程式（ES5，three.js r147–r160 皆可用）
 
 ## 模型清單
 
@@ -27,13 +27,15 @@
 | 懸鼓 | 禮器 | 紅漆鼓身、銅釘、彩繪雲紋鼓皮 | [`xuangu.glb`](models/xuangu.glb) | 0.28 MB | — | [互動版](pages/zhonggu.html) |
 | 杏樹 | 植物 | 枝條層層分岔、白花（暗紅花萼、黃蕊）綴枝 | [`apricot.glb`](models/apricot.glb) | 0.26 MB | — | [互動版](pages/apricot.html) |
 | 雙面繡屏風 | 禮器 | 六扇折屏、紫檀回紋框；正面尼山六景、背面吉祥花鳥（雙面異繡） | [`screen.glb`](models/screen.glb) | 0.86 MB | — | [互動版](pages/screen.html) |
+| 童子舉鼓 | 人物 | 銅鑄童子：總角雙髻、交領短衫，雙手把鼓高舉過頭 | [`tongzi-jugu.glb`](models/tongzi-jugu.glb) | 0.92 MB | — | [互動版](pages/tongzi.html) |
+| 童子擊鼓 | 人物 | 銅鑄童子：鼓架前弓步，雙手持槌擊鼓 | [`tongzi-jigu.glb`](models/tongzi-jigu.glb) | 1.0 MB | — | [互動版](pages/tongzi.html) |
 
 ## 使用說明
 
 - 單位為公尺，模型面朝 +Z、腳底在 y = 0
 - 人物模型的材質依名稱命名（`robe`、`trim`、`skin`、`beard`…），可在程式裡依名稱換色；導覽中的孔子銅像就是把這些材質換成青銅
 - 動畫為節點動畫（非骨架），在 three.js 用 `AnimationMixer` 依名稱播放即可
-- 孔門弟子四型、鐘鼓、杏樹為靜態模型；導覽中以 InstancedMesh 大量擺放
+- 孔門弟子四型、鐘鼓、杏樹、屏風、童子為靜態模型；童子的手臂與鼓是獨立網格（armL／armR／drum），可自行擺動；導覽中以 InstancedMesh 大量擺放
 
 ## 檔案結構
 
@@ -45,5 +47,5 @@ models.json     模型清單（名稱、說明、大小、動畫）
 icons/          網站圖示（SVG 原檔與各尺寸 PNG）
 manifest.json   加到主畫面用的設定
 pages/          各模型的互動製作頁
-src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js、screen.js）
+src/            程式模型原始碼（apricot.js、zhonggu.js、disciples.js、screen.js、tongzi.js）
 ```
