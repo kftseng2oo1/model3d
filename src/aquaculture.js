@@ -335,7 +335,7 @@ function makeAquaculture(THREE, opt) {
       var tex = texture(fishCv); tex.flipY = true;
       var fm = mats.fish || stdMat({ map: tex, vertexColors: true, roughness: 0.32, metalness: 0.35, side: THREE.DoubleSide }); fm.name = 'milkfish';
       addNode('body', null, new V3()); addNode('tail', 'body', new V3(mf.TAIL_X, 0, 0)); addNode('pecL', 'body', mf.pivPec[0]); addNode('pecR', 'body', mf.pivPec[1]);
-      addMesh('body', merge(mf.skinParts), fm); addMesh('tail', mf.tail, fm); addMesh('pecL', mf.pec[0], fm); addMesh('pecR', mf.pec[1], fm);
+      addMesh('body', merge(mf.skinParts), fm); addMesh('tail', mf.tail.clone().translate(mf.TAIL_X, 0, 0), fm); addMesh('pecL', mf.pec[0], fm); addMesh('pecR', mf.pec[1], fm);
       var w;
       w = sample(1.0, 40, function (x) { return x; });
       clip('Swim', 1.0, [Q('tail', w, function (x) { return [0, 0.5 * Math.sin(x * TAU), 0]; }), Q('body', w, function (x) { return [0, -0.07 * Math.sin(x * TAU - 0.7), 0]; }),
