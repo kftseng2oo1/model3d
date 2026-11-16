@@ -1,0 +1,173 @@
+/* 鐘鼓程式模型（ES5，可同時用在導覽 three r147 與預覽頁 r160）
+   編鐘：曾侯乙式兩層鐘架，黑漆朱紋橫樑、青銅人形立柱、合瓦形青銅甬鐘與鈕鐘（篆帶、鉦間、三十六枚、弧形于口）
+   建鼓：虎座立柱、紅漆鼓身銅釘、彩繪鼓皮，頂上華蓋與五色流蘇
+   懸鼓：門頭成排的小鼓
+   makeZhonggu(THREE, {audio, colorSpace, srgb}) -> { rack(), jiangu(), wallDrum(r,len,f), tick(dt), hit(item), play(seq) } */
+function makeZhonggu(THREE, opt) {
+  opt = opt || {};
+  var seed = 19, rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  var V3 = THREE.Vector3, TAU = Math.PI * 2;
+  function tex(w, h, fn, rep) { var c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); var t = new THREE.CanvasTexture(c);
+    if (opt.colorSpace) t.colorSpace = opt.colorSpace; if (opt.srgb && THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+  function cloud(g, x, y, r, col, lw) { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); for (var a = 0; a < 3.2 * Math.PI; a += 0.2) { var rr = r * (1 - a / (3.4 * Math.PI)); g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.stroke(); }
+  // ---- textures ----
+  var bronzeTex = tex(512, 256, function (g, w, h) {
+    var gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#9a7a44'); gr.addColorStop(1, '#7a5a30'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    var i, k;
+    for (i = 0; i < 900; i++) { g.fillStyle = 'rgba(' + (60 + rnd() * 40 | 0) + ',' + (120 + rnd() * 50 | 0) + ',' + (100 + rnd() * 40 | 0) + ',' + (0.08 + rnd() * 0.25) + ')'; g.beginPath(); g.arc(rnd() * w, rnd() * h, 1 + rnd() * 5, 0, TAU); g.fill(); }   // verdigris
+    // 鉦 panels (front u=.25, back u=.75) with inscription ticks; 篆帶 bands between stud rows
+    for (k = 0; k < 2; k++) { var cx = w * (0.25 + k * 0.5); g.fillStyle = 'rgba(60,40,20,.35)'; g.fillRect(cx - 24, 6, 48, h * 0.56);
+      g.fillStyle = 'rgba(240,210,140,.55)'; for (i = 0; i < 18; i++) g.fillRect(cx - 16 + (i % 3) * 12, 14 + Math.floor(i / 3) * 22, 7, 14);
+      g.strokeStyle = 'rgba(230,200,130,.6)'; g.lineWidth = 2; g.strokeRect(cx - 24, 6, 48, h * 0.56);
+      for (var sd = -1; sd <= 1; sd += 2) for (i = 0; i < 4; i++) { var y = 6 + i * (h * 0.56 / 3); g.fillStyle = 'rgba(220,190,120,.45)'; g.fillRect(cx + sd * 26 + (sd < 0 ? -84 : 0), y - 3, 84, 6); } }
+    g.fillStyle = 'rgba(230,200,130,.5)'; g.fillRect(0, h * 0.6, w, 4);   // band above the 鼓部
+    for (i = 0; i < 16; i++) cloud(g, (i + 0.5) * w / 16, h * 0.8, 12, 'rgba(230,200,130,.45)', 2.5);
+  }, true);
+  var lacquerTex = tex(512, 64, function (g, w, h) { g.fillStyle = '#1a1210'; g.fillRect(0, 0, w, h); g.fillStyle = '#b8322a'; g.fillRect(0, 6, w, 4); g.fillRect(0, h - 10, w, 4);
+    for (var x = 0; x < w; x += 48) { cloud(g, x + 24, h / 2, 13, '#c8402e', 3); g.fillStyle = '#d8a84a'; g.fillRect(x, h / 2 - 1, 4, 2); } }, true);
+  var drumBodyTex = tex(512, 128, function (g, w, h) { g.fillStyle = '#9a2218'; g.fillRect(0, 0, w, h); g.fillStyle = '#1a1210'; g.fillRect(0, h * 0.38, w, h * 0.24);
+    for (var x = 0; x < w; x += 64) cloud(g, x + 32, h / 2, 12, '#d8a84a', 3); g.fillStyle = '#d8a84a'; g.fillRect(0, h * 0.36, w, 3); g.fillRect(0, h * 0.62, w, 3); }, true);
+  var skinTex = tex(256, 256, function (g, w, h) { var c = w / 2; g.fillStyle = '#e8d6b0'; g.fillRect(0, 0, w, h);
+    var gr = g.createRadialGradient(c, c, 10, c, c, c); gr.addColorStop(0, 'rgba(255,240,210,.6)'); gr.addColorStop(1, 'rgba(150,110,60,.35)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#a8261c'; g.lineWidth = 8; g.beginPath(); g.arc(c, c, c * 0.82, 0, TAU); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(c, c, c * 0.7, 0, TAU); g.stroke();
+    for (var i = 0; i < 8; i++) { var a = i / 8 * TAU; cloud(g, c + Math.cos(a) * c * 0.45, c + Math.sin(a) * c * 0.45, 16, i % 2 ? '#a8261c' : '#2a1a14', 3); }
+    g.fillStyle = '#c8962e'; g.beginPath(); g.arc(c, c, 20, 0, TAU); g.fill(); g.strokeStyle = '#2a1a14'; g.lineWidth = 3; g.beginPath(); g.arc(c, c, 20, 0, TAU); g.stroke(); });
+  var streamCols = ['#c8302a', '#e8c040', '#2a6ab0', '#f2efe6', '#1a1a1a'];
+  var M = function (o) { return new THREE.MeshStandardMaterial(o); };
+  var bronze = M({ name: 'zg_bronze', map: bronzeTex, roughness: 0.42, metalness: 0.35, side: THREE.DoubleSide });
+  var bronzePlain = M({ name: 'zg_bronze2', color: 0x8a6a3a, roughness: 0.45, metalness: 0.35 });
+  var lacquer = M({ name: 'zg_lacquer', map: lacquerTex, roughness: 0.3 });
+  var drumBody = M({ name: 'zg_drum', map: drumBodyTex, roughness: 0.35 });
+  var skin = M({ name: 'zg_skin', map: skinTex, roughness: 0.8 });
+  var gold = M({ name: 'zg_gold', color: 0xd8a840, roughness: 0.3, metalness: 0.5, emissive: 0x2a1800 });
+  var red = M({ name: 'zg_red', color: 0xb02a20, roughness: 0.5, side: THREE.DoubleSide });
+  var streamMats = streamCols.map(function (c) { return M({ color: new THREE.Color(c), roughness: 0.7, side: THREE.DoubleSide }); });
+
+  // ---- sound: bronze bell (inharmonic partials, soft attack, long tail) and a warm drum ----
+  function ac() { return opt.audio ? opt.audio() : null; }
+  function bellSound(f, vol) { var a = ac(); if (!a) return; var t0 = a.currentTime, out = a.createGain(); out.gain.value = vol || 0.35; out.connect(a.destination);
+    var P = [[1, 1, 3.6], [1.006, 0.5, 3.2], [2.0, 0.45, 2.2], [2.92, 0.28, 1.5], [4.2, 0.16, 0.9], [5.4, 0.08, 0.55]];
+    for (var i = 0; i < P.length; i++) { var o = a.createOscillator(), g = a.createGain(); o.type = 'sine'; o.frequency.value = f * P[i][0];
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(P[i][1] * 0.3, t0 + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t0 + P[i][2]);
+      o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + P[i][2] + 0.05); } }
+  function drumSound(f, vol) { var a = ac(); if (!a) return; var t0 = a.currentTime, o = a.createOscillator(), g = a.createGain(), o2 = a.createOscillator(), g2 = a.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f * 1.6, t0); o.frequency.exponentialRampToValueAtTime(f, t0 + 0.12);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol || 0.6, t0 + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.2);
+    o2.type = 'sine'; o2.frequency.value = f * 1.51; g2.gain.setValueAtTime(0, t0); g2.gain.linearRampToValueAtTime((vol || 0.6) * 0.25, t0 + 0.005); g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.35);
+    var len = Math.floor(a.sampleRate * 0.04), b = a.createBuffer(1, len, a.sampleRate), d = b.getChannelData(0); for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    var n = a.createBufferSource(), nf = a.createBiquadFilter(), ng = a.createGain(); n.buffer = b; nf.type = 'lowpass'; nf.frequency.value = 600; ng.gain.value = (vol || 0.6) * 0.15;
+    o.connect(g); g.connect(a.destination); o2.connect(g2); g2.connect(a.destination); n.connect(nf); nf.connect(ng); ng.connect(a.destination);
+    o.start(t0); o.stop(t0 + 1.3); o2.start(t0); o2.stop(t0 + 0.4); n.start(t0); }
+
+  // ---- geometry helpers ----
+  function shade(m) { m.castShadow = true; m.receiveShadow = true; return m; }
+  function bellGeo(h, a0, a1, b0, b1, arch) {   // 合瓦形 bell body, top at y=0, mouth at y≈-h; u around, v down
+    var R = 14, Mn = 40, pos = [], uv = [], idx = [], i, j;
+    function P(s, t) { var a = a0 + (a1 - a0) * s, b = b0 + (b1 - b0) * s, st = Math.sin(t);
+      return new V3(a * Math.cos(t), -h * s + Math.pow(s, 4) * arch * h * Math.pow(Math.abs(st), 1.5), b * st * (0.5 + 0.5 * Math.abs(st))); }
+    for (i = 0; i <= R; i++) { var s = i / R; for (j = 0; j <= Mn; j++) { var t = j / Mn * TAU, p = P(s, t); pos.push(p.x, p.y, p.z); uv.push(j / Mn, 1 - s); }
+      if (i) for (j = 0; j < Mn; j++) { var a = (i - 1) * (Mn + 1) + j, c = a + Mn + 1; idx.push(a, a + 1, c, c, a + 1, c + 1); } }
+    var top = pos.length / 3; pos.push(0, 0, 0); uv.push(0.5, 1); for (j = 0; j < Mn; j++) idx.push(top, j + 1, j);   // 舞 (closed top)
+    var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    // 枚: 36 studs, 3 rows x 3 per side of the 鉦 on both faces
+    var studs = [], cone = new THREE.ConeGeometry(0.028 * h, 0.07 * h, 6); cone.translate(0, 0.035 * h, 0);
+    for (var face = 0; face < 2; face++) for (var sd = -1; sd <= 1; sd += 2) for (var r = 0; r < 3; r++) for (var cI = 0; cI < 3; cI++) {
+      var tt = (face ? 1.5 : 0.5) * Math.PI + sd * (0.32 + cI * 0.2), ss = 0.1 + r * 0.17, p = P(ss, tt), a = a0 + (a1 - a0) * ss, bb = b0 + (b1 - b0) * ss;
+      var nrm = new V3(p.x / (a * a), 0, p.z / (bb * bb)).normalize(), k = cone.clone(); k.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), nrm)); k.translate(p.x, p.y, p.z); studs.push(k); }
+    return { body: g, studs: merge(studs) };
+  }
+  function merge(list) { var pos = [], nor = [], uv = [], i, j; for (i = 0; i < list.length; i++) { var g = list[i].index ? list[i].toNonIndexed() : list[i], P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
+    for (j = 0; j < P.count; j++) { pos.push(P.getX(j), P.getY(j), P.getZ(j)); nor.push(N.getX(j), N.getY(j), N.getZ(j)); uv.push(U ? U.getX(j) : 0, U ? U.getY(j) : 0); } }
+    var o = new THREE.BufferGeometry(); o.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); o.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); o.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); return o; }
+  function box(p, w, h, d, m, x, y, z) { var o = shade(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m)); o.position.set(x, y, z); p.add(o); return o; }
+  function cyl(p, rt, rb, h, seg, m, x, y, z) { var o = shade(new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m)); o.position.set(x, y, z); p.add(o); return o; }
+  function ball(p, r, m, x, y, z, sx, sy, sz) { var o = shade(new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), m)); o.position.set(x, y, z); if (sx) o.scale.set(sx, sy, sz); p.add(o); return o; }
+
+  var items = [];   // everything that can be struck
+  function tagItem(obj, it) { obj.traverse(function (o) { o.userData.zg = it; }); items.push(it); return it; }
+
+  // ---- 編鐘架 ----
+  var LOW = [131, 147, 165, 196, 220], HIGH = [262, 294, 330, 392, 440, 523];   // 宮商角徵羽
+  function bell(parent, x, beamY, h, f, kind) {
+    var pv = new THREE.Group(); pv.position.set(x, beamY, 0); parent.add(pv);
+    var hang = new THREE.Group(); pv.add(hang);
+    var hook = cyl(hang, 0.018, 0.018, 0.22, 6, bronzePlain, 0, -0.11, 0);
+    var top = -0.22, g;
+    if (kind === 'yong') { g = cyl(hang, 0.05 * h + 0.02, 0.07 * h + 0.03, 0.42 * h, 10, bronze, 0, top - 0.21 * h, 0); var ring = new THREE.Mesh(new THREE.TorusGeometry(0.06 * h + 0.03, 0.015, 6, 14), bronzePlain); ring.position.set(0, top - 0.06, 0); ring.rotation.y = Math.PI / 2; hang.add(ring); top -= 0.42 * h; }
+    else { var lp = new THREE.Mesh(new THREE.TorusGeometry(0.09 * h + 0.02, 0.02 + 0.01 * h, 6, 14, Math.PI), bronzePlain); lp.position.set(0, top - 0.11 * h - 0.02, 0); hang.add(lp); top -= 0.11 * h + 0.02; }
+    var bg = bellGeo(h, 0.24 * h, 0.36 * h, 0.17 * h, 0.25 * h, 0.12);
+    var body = shade(new THREE.Mesh(bg.body, bronze)); body.position.y = top; hang.add(body);
+    var st = shade(new THREE.Mesh(bg.studs, bronze)); st.position.y = top; hang.add(st);
+    return tagItem(pv, { kind: 'bell', pv: pv, f: f, sw: 0, v: 0 });
+  }
+  function figureColumn(p, x, H) {   // 青銅佩劍武士立柱（簡化）
+    var g = new THREE.Group(); g.position.set(x, 0, 0); p.add(g);
+    box(g, 0.7, 0.25, 0.7, bronzePlain, 0, 0.125, 0); ball(g, 0.32, bronzePlain, 0, 0.42, 0, 1, 0.6, 1);
+    var robe = cyl(g, 0.17, 0.26, 1.15, 12, bronze, 0, 1.1, 0); ball(g, 0.2, bronzePlain, 0, 1.75, 0, 1.1, 0.8, 0.9);
+    ball(g, 0.13, bronzePlain, 0, 1.98, 0.02, 0.9, 1.05, 0.95);   // head
+    cyl(g, 0.05, 0.05, 0.5, 6, bronzePlain, 0.2, 1.62, 0).rotation.z = 0.4; cyl(g, 0.05, 0.05, 0.5, 6, bronzePlain, -0.2, 1.62, 0).rotation.z = -0.4;   // arms raised to the beam
+    cyl(g, 0.05, 0.05, 0.55, 6, gold, 0.2, 1.05, 0.12).rotation.z = 0.15;   // sword
+    cyl(g, 0.08, 0.1, H - 2.15, 10, lacquer, 0, 2.15 + (H - 2.15) / 2, 0);
+    return g; }
+  function rack() {
+    var g = new THREE.Group(), W = 8.4, yLow = 3.05, yHigh = 5.25, i;
+    figureColumn(g, -W / 2, yHigh); figureColumn(g, W / 2, yHigh);
+    var b1 = box(g, W + 0.8, 0.26, 0.26, lacquer, 0, yLow + 0.13, 0), b2 = box(g, W + 0.8, 0.26, 0.26, lacquer, 0, yHigh + 0.13, 0);
+    for (var s = -1; s <= 1; s += 2) for (var y = 0; y < 2; y++) { var cap = box(g, 0.32, 0.36, 0.36, bronzePlain, s * (W / 2 + 0.5), (y ? yHigh : yLow) + 0.13, 0); ball(g, 0.12, gold, s * (W / 2 + 0.7), (y ? yHigh : yLow) + 0.2, 0); }
+    var bells = [];
+    for (i = 0; i < 5; i++) bells.push(bell(g, -W / 2 + 0.9 + i * 1.65, yLow, 1.25 - i * 0.1, LOW[i], 'yong'));
+    for (i = 0; i < 6; i++) bells.push(bell(g, -W / 2 + 0.8 + i * 1.36, yHigh, 0.68 - i * 0.05, HIGH[i], 'niu'));
+    // 撞鐘棒 resting against the frame: tapping it plays a short phrase
+    var mallet = new THREE.Group(); mallet.position.set(W / 2 + 0.75, 0, 0.5); mallet.rotation.z = 0.18; g.add(mallet);
+    cyl(mallet, 0.05, 0.05, 2.0, 8, lacquer, 0, 1.0, 0); var hd = cyl(mallet, 0.11, 0.11, 0.42, 10, red, 0, 2.05, 0); hd.rotation.z = Math.PI / 2;
+    var mi = tagItem(mallet, { kind: 'mallet', rack: bells });
+    return { group: g, bells: bells, mallet: mi };
+  }
+  // ---- 鼓 ----
+  function drumMesh(r, L) {   // barrel drum along z, skins at both ends
+    var g = new THREE.Group(), pts = [], i, n = 10;
+    for (i = 0; i <= n; i++) { var t = i / n, rr = r * (1 + 0.12 * Math.sin(Math.PI * t)); pts.push(new THREE.Vector2(rr, -L / 2 + L * t)); }
+    var lg = new THREE.LatheGeometry(pts, 32); lg.rotateX(Math.PI / 2); var body = shade(new THREE.Mesh(lg, drumBody)); g.add(body);
+    var skins = [];
+    for (var s = -1; s <= 1; s += 2) { var sk = shade(new THREE.Mesh(new THREE.CircleGeometry(r * 0.995, 32), skin)); sk.position.z = s * (L / 2 + 0.002); if (s < 0) sk.rotation.y = Math.PI; g.add(sk); skins.push(sk);
+      var studs = [], sg = new THREE.SphereGeometry(r * 0.035, 6, 4); for (i = 0; i < 28; i++) { var a = i / 28 * TAU, q = sg.clone(); q.translate(Math.cos(a) * r * 1.01, Math.sin(a) * r * 1.01, s * (L / 2 - r * 0.07)); studs.push(q); }
+      g.add(shade(new THREE.Mesh(merge(studs), gold))); }
+    return { group: g, skins: skins };
+  }
+  function wallDrum(r, L, f) { var d = drumMesh(r, L); return tagItem(d.group, { kind: 'drum', g: d.group, skins: d.skins, f: f || 110, k: 0 }); }
+  function jiangu() {   // 建鼓
+    var g = new THREE.Group();
+    box(g, 1.5, 0.3, 1.5, bronzePlain, 0, 0.15, 0);
+    var tiger = new THREE.Group(); tiger.position.y = 0.3; g.add(tiger);   // 虎座: four crouching tigers around the pole
+    for (var k = 0; k < 4; k++) { var a = k / 4 * TAU + Math.PI / 4, tx = Math.cos(a) * 0.45, tz = Math.sin(a) * 0.45; var b = ball(tiger, 0.24, bronze, tx, 0.18, tz, 1.4, 0.75, 0.8); b.rotation.y = -a;
+      ball(tiger, 0.14, bronze, tx * 1.55, 0.26, tz * 1.55, 1, 0.9, 1); }
+    cyl(g, 0.075, 0.09, 5.4, 10, lacquer, 0, 2.95, 0);
+    var d = drumMesh(0.85, 1.25); d.group.position.y = 2.45; g.add(d.group);
+    // 華蓋 with gold rim and five-colour streamers
+    var can = new THREE.Group(); can.position.y = 5.0; g.add(can);
+    var cone = shade(new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.5, 24, 1, true), red)); cone.position.y = 0.25; can.add(cone);
+    var rim = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.035, 6, 32), gold); rim.rotation.x = Math.PI / 2; can.add(rim);
+    ball(can, 0.13, gold, 0, 0.62, 0); for (k = 0; k < 3; k++) { var fe = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.9), streamMats[k === 1 ? 2 : 3]); fe.position.set(0, 1.05, 0); fe.rotation.set(0, k / 3 * Math.PI, (k - 1) * 0.35); can.add(fe); }
+    var streamers = [];
+    for (k = 0; k < 15; k++) { var aa = k / 15 * TAU, sp = new THREE.Group(); sp.position.set(Math.cos(aa) * 1.12, 0, Math.sin(aa) * 1.12); can.add(sp);
+      var pl = new THREE.PlaneGeometry(0.1, 1.3); pl.translate(0, -0.65, 0); var m = new THREE.Mesh(pl, streamMats[k % 5]); m.rotation.y = -aa + Math.PI / 2; sp.add(m); streamers.push({ g: sp, ph: rnd() * TAU }); }
+    var it = tagItem(g, { kind: 'drum', g: d.group, skins: d.skins, f: 70, k: 0, big: true, streamers: streamers, sway: 0 });
+    return { group: g, item: it };
+  }
+  // ---- strike / animate ----
+  var queue = [];
+  function hit(it) {
+    if (!it) return;
+    if (it.kind === 'bell') { it.v += 1.4 + 0.6 / Math.max(0.3, it.f / 262); bellSound(it.f, 0.38); }
+    else if (it.kind === 'drum') { it.k = 1; if (it.sway !== undefined) it.sway = 1; drumSound(it.f, it.big ? 0.75 : 0.5); }
+    else if (it.kind === 'mallet') play(it.rack, [5, 7, 8, 7, 5, 3, 4, 5, -1, 8, 9, 10, 9, 8, 7, 5]); }
+  function play(bells, seq) { queue.length = 0; for (var i = 0; i < seq.length; i++) if (seq[i] >= 0) queue.push({ t: i * 0.42, b: bells[seq[i]] }); queue.t = 0; }
+  var time = 0;
+  function tick(dt) { time += dt;
+    if (queue.length) { queue.t += dt; while (queue.length && queue[0].t <= queue.t) hit(queue.shift().b); }
+    for (var i = 0; i < items.length; i++) { var it = items[i];
+      if (it.kind === 'bell') { it.v += (-it.sw * 9 - it.v * 1.6) * dt; it.sw += it.v * dt; it.pv.rotation.x = it.sw * 0.12; }
+      else if (it.kind === 'drum') { it.k = Math.max(0, it.k - dt * 3); var p = 1 + Math.sin(time * 60) * 0.025 * it.k; for (var s = 0; s < it.skins.length; s++) it.skins[s].scale.set(p, p, 1);
+        if (it.streamers) { it.sway = Math.max(0, it.sway - dt * 0.4); for (var k = 0; k < it.streamers.length; k++) { var st = it.streamers[k]; st.g.rotation.x = Math.sin(time * 1.3 + st.ph) * (0.04 + 0.25 * it.sway); st.g.rotation.z = Math.cos(time * 1.1 + st.ph) * (0.03 + 0.2 * it.sway); } } } } }
+  return { rack: rack, jiangu: jiangu, wallDrum: wallDrum, tick: tick, hit: hit, items: items, mats: { bronze: bronze, lacquer: lacquer } };
+}

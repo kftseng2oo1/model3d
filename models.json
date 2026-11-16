@@ -1,0 +1,201 @@
+[
+ {
+  "k": "tortoise",
+  "t": "烏龜",
+  "d": "依照片設計的寫實烏龜，龜甲紋理與鱗片",
+  "p": "pages/tortoise.html",
+  "g": "動物",
+  "size": 8.76,
+  "anims": [
+   "Walk",
+   "Idle",
+   "Blink",
+   "Retract"
+  ]
+ },
+ {
+  "k": "xuanwu",
+  "t": "玄武",
+  "d": "北方神獸：龜蛇合體，龜殼玄紋、靈蛇纏繞",
+  "p": "pages/xuanwu.html",
+  "g": "五方神獸",
+  "size": 3.22,
+  "anims": [
+   "Idle",
+   "Walk",
+   "Retract",
+   "SnakeRear",
+   "Blink",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "zhuque",
+  "t": "朱雀",
+  "d": "南方神獸：華麗火鳳，羽翼火焰、長尾開屏",
+  "p": "pages/zhuque.html",
+  "g": "五方神獸",
+  "size": 4.16,
+  "anims": [
+   "Idle",
+   "Cry",
+   "Flap",
+   "Display",
+   "Flame",
+   "Fly",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "dragon",
+  "t": "青龍",
+  "d": "東方神獸：翠鱗金鬃、踏雲戲珠",
+  "p": "pages/qinglong.html",
+  "g": "五方神獸",
+  "size": 3.11,
+  "anims": [
+   "Idle",
+   "Roar",
+   "Undulate",
+   "Pearl",
+   "Cloud",
+   "Fly",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "tiger",
+  "t": "白虎",
+  "d": "西方神獸：白虎披甲，坐於山岩台座",
+  "p": "pages/baihu.html",
+  "g": "五方神獸",
+  "size": 1.16,
+  "anims": [
+   "Idle",
+   "Roar",
+   "Swipe",
+   "TailLash",
+   "Stand",
+   "Run",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "qilin",
+  "t": "麒麟",
+  "d": "中央瑞獸：鹿身馬蹄龍首、翡翠金鱗、水晶獨角",
+  "p": "pages/qilin.html",
+  "g": "五方神獸",
+  "size": 0.95,
+  "anims": [
+   "Idle",
+   "Cry",
+   "Stamp",
+   "Shake",
+   "Scroll",
+   "Leap",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "confucius",
+  "t": "孔子",
+  "d": "至聖先師：小冠金簪、長髯、寬袍大袖、捧竹簡",
+  "p": "pages/confucius.html",
+  "g": "人物",
+  "size": 0.7,
+  "anims": [
+   "Idle",
+   "Bow",
+   "Nod",
+   "Teach",
+   "Awaken"
+  ]
+ },
+ {
+  "k": "laozi",
+  "t": "老子",
+  "d": "白眉長髯、布衣寬袖、藜杖掛葫蘆",
+  "p": "pages/laozi.html",
+  "g": "人物",
+  "size": 0.38,
+  "anims": [
+   "Idle",
+   "Bow",
+   "Nod",
+   "Speak"
+  ]
+ },
+ {
+  "k": "yanhui",
+  "t": "顏回",
+  "d": "盤坐讀竹簡，補丁布衣、竹籃與葫蘆",
+  "p": "pages/disciples.html",
+  "g": "孔門弟子",
+  "size": 0.39,
+  "anims": []
+ },
+ {
+  "k": "zilu",
+  "t": "子路",
+  "d": "武士站姿，甲冑紅巾、持劍",
+  "p": "pages/disciples.html",
+  "g": "孔門弟子",
+  "size": 0.39,
+  "anims": []
+ },
+ {
+  "k": "zigong",
+  "t": "子貢",
+  "d": "藍袍金邊華服，伸手論說",
+  "p": "pages/disciples.html",
+  "g": "孔門弟子",
+  "size": 0.33,
+  "anims": []
+ },
+ {
+  "k": "zengzi",
+  "t": "曾子",
+  "d": "跪坐小几前執筆書寫，身旁書冊",
+  "p": "pages/disciples.html",
+  "g": "孔門弟子",
+  "size": 0.33,
+  "anims": []
+ },
+ {
+  "k": "bianzhong",
+  "t": "編鐘",
+  "d": "曾侯乙式兩層鐘架：甬鐘五口、鈕鐘六口",
+  "p": "pages/zhonggu.html",
+  "g": "禮器",
+  "size": 1.33,
+  "anims": []
+ },
+ {
+  "k": "jiangu",
+  "t": "建鼓",
+  "d": "虎座立柱、紅漆銅釘鼓身、華蓋五色流蘇",
+  "p": "pages/zhonggu.html",
+  "g": "禮器",
+  "size": 0.54,
+  "anims": []
+ },
+ {
+  "k": "xuangu",
+  "t": "懸鼓",
+  "d": "紅漆鼓身、銅釘、彩繪雲紋鼓皮",
+  "p": "pages/zhonggu.html",
+  "g": "禮器",
+  "size": 0.28,
+  "anims": []
+ },
+ {
+  "k": "apricot",
+  "t": "杏樹",
+  "d": "枝條層層分岔、白花（暗紅花萼、黃蕊）綴枝",
+  "p": "pages/apricot.html",
+  "g": "植物",
+  "size": 0.26,
+  "anims": []
+ }
+]

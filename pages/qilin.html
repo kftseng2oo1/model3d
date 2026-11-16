@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>麒麟・中央瑞獸</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#14120c;font-family:-apple-system,"PingFang TC","Noto Serif TC","Noto Sans TC",serif;-webkit-user-select:none;user-select:none;touch-action:none;color:#e6ecf8}
+  canvas{display:block}
+  #title{position:fixed;top:14px;left:16px;pointer-events:none}
+  #title h1{margin:0;font-size:22px;letter-spacing:6px;color:#f2f6ff;text-shadow:0 0 14px rgba(160,200,255,.6)}
+  #title p{margin:3px 0 0;font-size:12px;opacity:.7;letter-spacing:1px}
+  #meter{position:fixed;top:18px;right:16px;width:110px;pointer-events:none;font-size:11px;text-align:right;opacity:.85}
+  #meter .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:4px;overflow:hidden}
+  #meter .fill{height:100%;width:0;background:linear-gradient(90deg,#9fc8ff,#f2d48a);transition:width .2s}
+  #ui{position:fixed;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
+  #ui button{border:1px solid rgba(200,220,255,.4);border-radius:22px;padding:9px 15px;font-size:15px;background:rgba(16,24,40,.85);color:#e6ecf8;-webkit-tap-highlight-color:transparent;cursor:pointer;font-family:inherit}
+  #ui button.on{background:#d9b04a;color:#1a1408}
+  #hint{position:fixed;left:50%;top:64px;transform:translateX(-50%);font-size:12px;opacity:.75;text-align:center;pointer-events:none;transition:opacity 1s;width:90vw}
+  #toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:26px;letter-spacing:8px;color:#f6f0dc;text-shadow:0 0 18px rgba(160,200,255,.85);opacity:0;transition:opacity .6s;pointer-events:none;white-space:nowrap}
+  #toast.small{font-size:13px;letter-spacing:1px;top:auto;bottom:80px;transform:translateX(-50%);background:rgba(16,24,40,.92);padding:8px 14px;border-radius:14px;text-shadow:none;white-space:normal;max-width:86vw;text-align:center}
+  #toast.show{opacity:1}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;letter-spacing:4px;color:#f2f6ff}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}
+</script>
+</head>
+<body>
+<div id="loading">麒麟踏雲中…</div>
+<div id="title"><h1>麒麟</h1><p>中央瑞獸・五行屬土</p></div>
+<div id="meter">親密度<div class="bar"><div class="fill" id="fill"></div></div></div>
+<div id="hint">點頭・點蹄・點身體鬃毛・點石台（吐玉書）<br>按住在牠身上來回撫摸</div>
+<div id="toast"></div>
+<div id="ui">
+  <button id="bRun">騰躍</button>
+  <button id="bAwake">喚醒麒麟</button>
+  <button id="bSpin">自動旋轉</button>
+  <button id="bExport">匯出 .glb</button>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { zipSync } from 'fflate';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x14120c); scene.fog = new THREE.Fog(0x14120c, 12, 28);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 80); camera.position.set(2.6, 2.3, 5.4);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 1.5, 0); controls.enableDamping = true; controls.minDistance = 2; controls.maxDistance = 16; controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x1a1a24, 0.9));
+const key = new THREE.DirectionalLight(0xfff6ea, 2.3); key.position.set(3, 7, 5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 25 }); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02; scene.add(key);
+const rimL = new THREE.DirectionalLight(0x9fc0ff, 1.2); rimL.position.set(-4, 3, -4); scene.add(rimL);
+const fillL = new THREE.DirectionalLight(0xffe8c8, 0.5); fillL.position.set(0, 2, 6); scene.add(fillL);
+const glowLight = new THREE.PointLight(0xffd36a, 0, 7, 1.6); glowLight.position.set(0, 1.6, 0.6); scene.add(glowLight);
+
+const rand = (() => { let s = 67; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mix = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2, V = (x, y, z) => new THREE.Vector3(x, y, z);
+function canvasTex(w, h, fn, color = true, mime = 'image/jpeg') { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); if (color) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); t.userData.mimeType = mime; return t; }
+
+// ===== environment =====
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), new THREE.MeshStandardMaterial({ color: 0x2a2418, roughness: 0.7, metalness: 0.15 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+for (const r of [1.6, 3.4]) { const m = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.07, 96), new THREE.MeshBasicMaterial({ color: 0x8a7a4a })); m.rotation.x = -Math.PI / 2; m.position.y = 0.005; scene.add(m); }
+function dotTex() { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); }
+const DOT = dotTex();
+{ const N = 300, g = new THREE.BufferGeometry(), a = new Float32Array(N * 3); for (let i = 0; i < N; i++) { const t = rand() * TAU, r = 3 + rand() * 10; a.set([Math.cos(t) * r, rand() * 7, Math.sin(t) * r], i * 3); }
+  g.setAttribute('position', new THREE.BufferAttribute(a, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 0.05, map: DOT, color: 0xdfe8ff, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }))); }
+
+// ===== textures =====
+function scaleField(S, G) {
+  const cell = S / G, pts = [];
+  for (let i = 0; i < G * G; i++) pts.push([0.15 + rand() * 0.7, 0.15 + rand() * 0.7, rand()]);
+  const edge = new Float32Array(S * S), tone = new Float32Array(S * S), dy = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell); let d1 = 1e9, d2 = 1e9, id = 0, py = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const gx = cx + ox, gy = cy + oy, p = pts[((gy + G) % G) * G + ((gx + G) % G)], qy = (gy + p[1]) * cell, d = Math.hypot(x - (gx + p[0]) * cell, (y - qy) * 1.35);
+      if (d < d1) { d2 = d1; d1 = d; id = p[2]; py = (y - qy) / cell; } else if (d < d2) d2 = d; }
+    edge[y * S + x] = Math.min(1, (d2 - d1) / (cell * 0.3)); tone[y * S + x] = id; dy[y * S + x] = py;
+  }
+  return { edge, tone, dy };
+}
+function scaleTextures() {   // jade-teal scales with gold rims, cream underside toward v=0
+  const S = 512, { edge, tone, dy } = scaleField(S, 30);
+  const dark = [18, 104, 96], light = [96, 214, 196], rim = [246, 214, 120], belly = [240, 228, 196];
+  const map = canvasTex(S, S, (ctx) => { const img = ctx.createImageData(S, S), d = img.data;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const i = y * S + x, e = smooth(0, 0.3, edge[i]), t = tone[i] * 0.45 + smooth(-0.5, 0.5, dy[i]) * 0.55, n = rand() * 8, b = smooth(0.72, 0.9, y / S);
+      for (let k = 0; k < 3; k++) { const base = mix(mix(dark[k], light[k], t), belly[k], b); d[i * 4 + k] = mix(rim[k], base, e) + n; } d[i * 4 + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+    ctx.fillStyle = 'rgba(255,240,180,.9)'; for (let i = 0; i < 90; i++) { ctx.beginPath(); ctx.arc(rand() * S, rand() * S * 0.7, 0.8 + rand() * 1.6, 0, TAU); ctx.fill(); } });
+  const em = canvasTex(S, S, (ctx) => { const img = ctx.createImageData(S, S), d = img.data;
+    for (let i = 0; i < S * S; i++) { const g = 1 - smooth(0, 0.3, edge[i]); d[i * 4] = 240 * g; d[i * 4 + 1] = 200 * g; d[i * 4 + 2] = 100 * g; d[i * 4 + 3] = 255; } ctx.putImageData(img, 0, 0);
+    ctx.fillStyle = '#fff0c0'; for (let i = 0; i < 90; i++) { ctx.beginPath(); ctx.arc(rand() * S, rand() * S * 0.7, 0.8 + rand() * 1.6, 0, TAU); ctx.fill(); } });
+  for (const t of [map, em]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return { map, emissive: em };
+}
+function wispTexture(stops) {
+  return canvasTex(128, 256, (g, W, H) => { g.clearRect(0, 0, W, H); for (let k = 0; k < 3; k++) { const gr = g.createRadialGradient(W / 2, H * 0.78, 4, W / 2, H * 0.6, H * 0.62);
+    stops.forEach(([o, c]) => gr.addColorStop(o, c)); g.fillStyle = gr; g.fillRect(0, 0, W, H); } }, true, 'image/png');
+}
+function stoneTex() {
+  return canvasTex(512, 256, (g, W, H) => { g.fillStyle = '#6a6c66'; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 1400; i++) { const v = 80 + rand() * 50; g.fillStyle = `rgba(${v},${v + 2},${v - 4},.45)`; g.fillRect(rand() * W, rand() * H, 3 + rand() * 12, 2 + rand() * 6); }
+    g.strokeStyle = '#4a4c46'; g.lineWidth = 6; g.strokeRect(14, 14, W - 28, H - 28);
+    g.lineWidth = 4; for (let k = 0; k < 6; k++) { const cx = 60 + k * 80, cy = H / 2 + (k % 2 ? 26 : -26); g.beginPath(); for (let a = 0; a < 9; a += 0.15) { const r = 6 + a * 3.4; g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.stroke(); }
+    g.fillStyle = 'rgba(80,120,60,.55)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.ellipse(rand() * W, H - rand() * 30, 10 + rand() * 30, 4 + rand() * 8, 0, 0, TAU); g.fill(); }
+    g.fillStyle = '#e6c46a'; g.font = 'bold 72px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('仁', W / 2, H / 2 + 4); });
+}
+function scrollTex() {
+  return canvasTex(512, 160, (g, W, H) => { g.fillStyle = '#eef6ea'; g.fillRect(0, 0, W, H); g.fillStyle = '#9fd8c0'; g.fillRect(0, 0, W, 14); g.fillRect(0, H - 14, W, 14);
+    g.strokeStyle = '#c9a24a'; g.lineWidth = 3; g.strokeRect(24, 22, W - 48, H - 44);
+    g.fillStyle = '#2a4a3a'; g.font = 'bold 74px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('天下為公', W / 2, H / 2 + 4); });
+}
+
+// ===== materials =====
+const SC = scaleTextures();
+const glowMats = [];
+function glowable(m, base) { m.userData.baseEmissive = base; glowMats.push(m); return m; }
+const scaleMat = glowable(new THREE.MeshStandardMaterial({ name: 'scales', map: SC.map, emissiveMap: SC.emissive, emissive: 0xffffff, emissiveIntensity: 0.45, roughness: 0.32, metalness: 0.25 }), 0.45);
+const creamMat = new THREE.MeshStandardMaterial({ name: 'cream', color: 0xf0e4c4, roughness: 0.6 });
+const goldMat = new THREE.MeshStandardMaterial({ name: 'gold', color: 0xe8c060, roughness: 0.25, metalness: 0.8, emissive: 0x3a2800, emissiveIntensity: 1 });
+const bronzeMat = new THREE.MeshStandardMaterial({ name: 'bronze', color: 0xb07a40, roughness: 0.3, metalness: 0.8, emissive: 0x201000, emissiveIntensity: 1 });
+const jadeMat = glowable(new THREE.MeshStandardMaterial({ name: 'jade', color: 0x2fae80, emissive: 0x0f5a40, emissiveIntensity: 0.6, roughness: 0.15, metalness: 0.1 }), 0.6);
+const hoofMat = new THREE.MeshStandardMaterial({ name: 'hoof', color: 0x6a4a2a, roughness: 0.35, metalness: 0.5 });
+const hornMat = glowable(new THREE.MeshStandardMaterial({ name: 'horn', color: 0xd8fff6, emissive: 0x7ff0e0, emissiveIntensity: 1.0, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.88 }), 1.0);
+const eyeMat = glowable(new THREE.MeshStandardMaterial({ name: 'qilin_eye', color: 0xfff0b0, emissive: 0xffc040, emissiveIntensity: 1.1, roughness: 0.1 }), 1.1);
+const pupilMat = new THREE.MeshStandardMaterial({ name: 'pupil', color: 0x101008, roughness: 0.1 });
+const mouthMat = new THREE.MeshStandardMaterial({ name: 'mouth', color: 0x8a2a34, roughness: 0.6 });
+const flameMat = glowable(new THREE.MeshStandardMaterial({ name: 'wisp', color: 0xffe0a0, map: wispTexture([[0, 'rgba(255,255,220,1)'], [0.25, 'rgba(255,210,90,.95)'], [0.55, 'rgba(255,130,40,.8)'], [0.85, 'rgba(220,60,20,.3)'], [1, 'rgba(200,30,0,0)']]), emissive: 0xffa040, emissiveIntensity: 0.8, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 1 }), 0.8);
+flameMat.emissiveMap = flameMat.map;
+const maneMat = glowable(new THREE.MeshStandardMaterial({ name: 'mane', color: 0xc8d0ff, map: wispTexture([[0, 'rgba(255,250,225,1)'], [0.3, 'rgba(250,220,150,.9)'], [0.6, 'rgba(150,140,230,.6)'], [0.85, 'rgba(80,60,170,.25)'], [1, 'rgba(30,20,120,0)']]), emissive: 0xb0a0ff, emissiveIntensity: 0.6, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 1 }), 0.6);
+maneMat.emissiveMap = maneMat.map;
+const stoneMat = new THREE.MeshStandardMaterial({ name: 'stone', map: stoneTex(), roughness: 0.85 });
+const stoneTop = new THREE.MeshStandardMaterial({ name: 'stone_top', color: 0x5a6a50, roughness: 0.9 });
+const scrollMat = glowable(new THREE.MeshStandardMaterial({ name: 'scroll', map: scrollTex(), emissive: 0xffffff, emissiveIntensity: 0.25, roughness: 0.5, side: THREE.DoubleSide }), 0.25);
+scrollMat.emissiveMap = scrollMat.map;
+
+// ===== helpers =====
+const wispGeoCache = new Map();
+function wispGeo(len, wid) { const k = len.toFixed(2) + '_' + wid.toFixed(2); if (wispGeoCache.has(k)) return wispGeoCache.get(k);
+  const sh = new THREE.Shape(), N = 20, hw = (v) => wid * 0.5 * Math.sin(Math.PI * Math.pow(Math.min(0.999, v), 0.6)) * Math.pow(1 - v, 0.25), wv = (v) => Math.sin(v * 7) * wid * 0.25 * v;
+  sh.moveTo(0, 0); for (let i = 1; i <= N; i++) { const v = i / N; sh.lineTo(hw(v) + wv(v), v * len); } for (let i = N - 1; i >= 1; i--) { const v = i / N; sh.lineTo(-hw(v) + wv(v), v * len); }
+  const g = new THREE.ShapeGeometry(sh, 2), p = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / wid + 0.5, 0.15 + 0.8 * (p.getY(i) / len)); g.rotateX(-Math.PI / 2); wispGeoCache.set(k, g); return g; }
+function addWisp(parent, mat, x, y, z, len, wid, yaw, pitch, roll = 0) { const m = new THREE.Mesh(wispGeo(len, wid), mat); m.position.set(x, y, z); m.rotation.order = 'YXZ'; m.rotation.set(pitch, yaw, roll); m.renderOrder = 2; parent.add(m); const m2 = m.clone(); m2.rotation.z = roll + Math.PI / 2; parent.add(m2); return m; }
+const sphere = new THREE.SphereGeometry(1, 36, 24);
+function blob(parent, mat, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) { const m = new THREE.Mesh(sphere, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz); m.castShadow = true; parent.add(m); return m; }
+function limb(parent, mat, len, r0, r1) { const g = new THREE.CylinderGeometry(r1, r0, len, 18, 3); g.translate(0, -len / 2, 0); const m = new THREE.Mesh(g, mat); m.castShadow = true; parent.add(m); blob(parent, mat, 0, 0, 0, r0, r0, r0); return m; }
+function bangle(parent, y, r) { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 8, 24), bronzeMat); t.rotation.x = Math.PI / 2; t.position.y = y; parent.add(t); blob(parent, jadeMat, 0, y, r + 0.012, 0.018, 0.018, 0.018); }
+function tagPart(obj, part) { obj.traverse(o => { o.userData.part = part; }); }
+
+// ===== build =====
+const root = new THREE.Group(); root.name = 'Qilin'; scene.add(root);
+const PED_TOP = 0.6;
+const altar = new THREE.Group(); altar.name = 'Altar'; root.add(altar);
+{ const b = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 1.9), [stoneMat, stoneMat, stoneTop, stoneMat, stoneMat, stoneMat]); b.position.y = 0.25; b.castShadow = b.receiveShadow = true; altar.add(b);
+  const c = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.1, 2.02), stoneTop); c.position.y = 0.55; c.castShadow = c.receiveShadow = true; altar.add(c); }
+tagPart(altar, 'altar');
+
+const beast = new THREE.Group(); beast.name = 'Body'; beast.position.y = PED_TOP; root.add(beast);
+const hips = new THREE.Group(); hips.name = 'Hips'; beast.add(hips);
+blob(hips, scaleMat, 0, 0.02, -0.02, 0.22, 0.25, 0.26);
+const spine = new THREE.Group(); spine.name = 'Spine'; hips.add(spine);
+blob(spine, scaleMat, 0, 0.0, 0.36, 0.2, 0.23, 0.46);
+blob(spine, creamMat, 0, -0.1, 0.36, 0.16, 0.15, 0.4);
+const chest = new THREE.Group(); chest.name = 'Chest'; chest.position.set(0, 0.03, 0.74); spine.add(chest);
+blob(chest, scaleMat, 0, 0, 0, 0.22, 0.27, 0.24);
+blob(chest, creamMat, 0, -0.08, 0.1, 0.15, 0.2, 0.15);
+// bronze collar with jade beads and a medallion
+{ const col = new THREE.Group(); col.position.set(0, 0.12, 0.12); col.rotation.x = -0.9; chest.add(col);
+  const t = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 10, 40), bronzeMat); col.add(t);
+  for (let k = 0; k < 11; k++) { const a = Math.PI * 0.15 + (k / 10) * Math.PI * 0.7; blob(col, jadeMat, Math.cos(a + Math.PI) * 0.19, Math.sin(a + Math.PI) * 0.19, 0.02, 0.03, 0.03, 0.03); }
+  const med = new THREE.Group(); med.position.set(0, -0.26, 0.03); col.add(med); blob(med, goldMat, 0, 0, 0, 0.06, 0.06, 0.02); blob(med, jadeMat, 0, 0, 0.015, 0.04, 0.04, 0.015); }
+// saddle cloth over the back
+{ const sc = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, TAU, 0, Math.PI * 0.32), bronzeMat); sc.scale.set(0.235, 0.26, 0.28); sc.position.set(0, 0.0, 0.42); spine.add(sc);
+  for (let k = 0; k < 7; k++) { const a = (k / 6 - 0.5) * 2.2; blob(spine, jadeMat, Math.sin(a) * 0.2, 0.12 + Math.cos(a) * 0.08, 0.42 + (k % 2 ? 0.1 : -0.1), 0.028, 0.028, 0.028); } }
+tagPart(hips, 'body');
+
+// legs: deer/horse proportions with bronze hooves, gold flame tufts at the joints
+const LEGS = {};
+function frontLeg(s) {
+  const nm = 'Leg_F' + (s > 0 ? 'L' : 'R');
+  const up = new THREE.Group(); up.name = nm; up.position.set(s * 0.14, -0.06, 0.04); chest.add(up);
+  blob(up, scaleMat, 0, -0.06, 0, 0.09, 0.17, 0.1);
+  limb(up, scaleMat, 0.4, 0.075, 0.05);
+  const lo = new THREE.Group(); lo.name = nm + '_Low'; lo.position.set(0, -0.4, 0); up.add(lo);
+  limb(lo, scaleMat, 0.36, 0.045, 0.035);
+  addWisp(lo, flameMat, 0, 0.0, -0.03, 0.3, 0.14, Math.PI, 0.6);
+  bangle(lo, -0.3, 0.04);
+  const hf = new THREE.Group(); hf.name = nm + '_Hoof'; hf.position.set(0, -0.36, 0); lo.add(hf);
+  limb(hf, scaleMat, 0.1, 0.035, 0.04);
+  const h = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.07, 16), hoofMat); h.position.set(0, -0.12, 0.01); hf.add(h);
+  tagPart(up, 'hoof'); LEGS[nm] = { up, lo, hf };
+}
+function hindLeg(s) {
+  const nm = 'Leg_B' + (s > 0 ? 'L' : 'R');
+  const th = new THREE.Group(); th.name = nm; th.position.set(s * 0.13, 0.0, -0.04); hips.add(th);
+  blob(th, scaleMat, 0, -0.12, 0.03, 0.12, 0.24, 0.17);
+  limb(th, scaleMat, 0.36, 0.085, 0.06);
+  const sh = new THREE.Group(); sh.name = nm + '_Low'; sh.position.set(0, -0.36, 0); th.add(sh);
+  limb(sh, scaleMat, 0.36, 0.055, 0.04);
+  addWisp(sh, flameMat, 0, 0.0, -0.03, 0.32, 0.14, Math.PI, 0.3);
+  const cn = new THREE.Group(); cn.name = nm + '_Foot'; cn.position.set(0, -0.36, 0); sh.add(cn);
+  limb(cn, scaleMat, 0.26, 0.038, 0.034);
+  bangle(cn, -0.2, 0.038);
+  const h = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.058, 0.07, 16), hoofMat); h.position.set(0, -0.29, 0.01); cn.add(h);
+  tagPart(th, 'hoof'); LEGS[nm] = { th, sh, cn };
+}
+frontLeg(1); frontLeg(-1); hindLeg(1); hindLeg(-1);
+
+// long arched neck + dragon-like head with one crystal horn
+const neck = new THREE.Group(); neck.name = 'Neck'; neck.position.set(0, 0.12, 0.12); chest.add(neck);
+blob(neck, scaleMat, 0, 0, 0.2, 0.13, 0.15, 0.28);
+blob(neck, creamMat, 0, -0.07, 0.22, 0.09, 0.09, 0.24);
+const mane = new THREE.Group(); mane.name = 'Mane'; neck.add(mane);
+for (let k = 0; k < 8; k++) { const z = 0.38 - k * 0.065; addWisp(mane, maneMat, 0, 0.12, z, 0.3, 0.15, Math.PI + (k % 2 ? 0.3 : -0.3), -0.7, (k % 2 ? 0.3 : -0.3)); }
+const head = new THREE.Group(); head.name = 'Head'; head.position.set(0, 0.0, 0.46); neck.add(head);
+let jaw;
+{
+  blob(head, scaleMat, 0, 0.03, 0, 0.12, 0.11, 0.14);
+  blob(head, scaleMat, 0, -0.005, 0.15, 0.075, 0.07, 0.15);   // long snout
+  blob(head, scaleMat, 0, 0.025, 0.27, 0.065, 0.05, 0.05);   // nose pad
+  for (const s of [1, -1]) {
+    blob(head, pupilMat, s * 0.035, 0.04, 0.31, 0.012, 0.01, 0.01);
+    const eg = new THREE.Group(); eg.position.set(s * 0.085, 0.065, 0.06); eg.rotation.set(0, s * 0.55, s * 0.2); head.add(eg);
+    blob(eg, eyeMat, 0, 0, 0, 0.026, 0.017, 0.016); blob(eg, pupilMat, 0, 0, 0.012, 0.006, 0.014, 0.005);
+    blob(head, goldMat, s * 0.07, 0.1, 0.07, 0.045, 0.012, 0.03, 0.2, s * 0.4, s * 0.35);   // brow
+    blob(head, scaleMat, s * 0.09, 0.13, -0.06, 0.025, 0.06, 0.02, 0.3, 0, -s * 0.5);   // ear
+    // swept golden side-horns (small, from the reference's dragon head)
+    const sh = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.18, 8), goldMat); sh.position.set(s * 0.06, 0.15, -0.08); sh.rotation.set(-1.0, 0, -s * 0.35); head.add(sh);
+    // whiskers
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.001, 0.32, 5), goldMat); w.position.set(s * 0.13, 0.0, 0.2); w.rotation.set(0.6, 0, s * 1.2); head.add(w);
+    addWisp(head, maneMat, s * 0.1, -0.01, 0.0, 0.14, 0.07, Math.PI - s * 0.4, -0.1);   // cheek tufts
+  }
+  // the single crystal horn of the benevolent beast
+  const horn = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.42, 16, 6), hornMat); horn.name = 'Horn'; horn.position.set(0, 0.28, 0.0); horn.rotation.x = -0.45; head.add(horn);
+  for (let k = 0; k < 4; k++) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.029 - k * 0.0062, 0.0045, 6, 18), goldMat); r.position.set(0, -0.17 + k * 0.075, 0); r.rotation.x = Math.PI / 2; horn.add(r); }
+  jaw = new THREE.Group(); jaw.name = 'Jaw'; jaw.position.set(0, -0.045, 0.07); head.add(jaw);
+  blob(jaw, scaleMat, 0, -0.012, 0.1, 0.06, 0.025, 0.13);
+  blob(jaw, mouthMat, 0, 0.01, 0.1, 0.045, 0.01, 0.1);
+  for (let k = 0; k < 4; k++) addWisp(jaw, maneMat, (k - 1.5) * 0.02, -0.02, 0.1, 0.2, 0.07, (k - 1.5) * 0.15, 1.2);   // beard
+  for (let k = 0; k < 5; k++) { const a = (k - 2) / 2; addWisp(head, maneMat, a * 0.05, 0.1, -0.1, 0.3, 0.14, Math.PI + a * 0.4, -0.5 + Math.abs(a) * 0.2, a * 0.3); }   // flowing forelock
+  // jade scroll held in the mouth (hidden until summoned)
+  const scroll = new THREE.Group(); scroll.name = 'Scroll'; scroll.position.set(0, 0.02, 0.3); scroll.scale.set(0.01, 0.01, 0.01); head.add(scroll);
+  const paper = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.2), scrollMat); paper.name = 'ScrollPaper'; scroll.add(paper);
+  for (const s of [1, -1]) { const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.24, 12), jadeMat); rod.position.x = s * 0.32; scroll.add(rod); }
+}
+tagPart(neck, 'head');
+
+// ox tail ending in a golden flame tuft
+const TAIL_N = 9, tailNodes = [];
+{ let parent = hips; const segL = 0.08;
+  for (let i = 0; i < TAIL_N; i++) { const n = new THREE.Group(); n.name = 'Tail_' + i; n.position.set(0, i === 0 ? 0.12 : 0, i === 0 ? -0.24 : -segL); parent.add(n);
+    const r = mix(0.04, 0.025, i / TAIL_N); const m = new THREE.Mesh(sphere, scaleMat); m.scale.set(r, r, segL * 0.75); m.position.z = -segL / 2; m.castShadow = true; n.add(m); tailNodes.push(n); parent = n; }
+  const tuft = new THREE.Group(); tuft.name = 'TailTuft'; tailNodes[TAIL_N - 1].add(tuft);
+  for (let k = 0; k < 5; k++) addWisp(tuft, flameMat, 0, 0, -0.04, 0.26 + k * 0.03, 0.14, (k - 2) * 0.25, (k - 2) * 0.12);
+  tailNodes.forEach(n => tagPart(n, 'body')); }
+
+// ===== pose engine =====
+const _e = new THREE.Euler();
+const quatE = (x, y, z, o = 'XYZ') => new THREE.Quaternion().setFromEuler(_e.set(x, y, z, o));
+const REST = { t: 0, look: 0, cry: 0, jaw: 0, stamp: -1, shake: 0, scroll: 0, leap: -1, awake: 0, purr: 0 };
+function leapPath(p) {
+  const R = 2.4, circ = (th) => V(R * Math.sin(th), 0.9 + 0.35 * Math.sin(th * 3), R * Math.cos(th));
+  if (p < 0.12) { const k = smooth(0, 0.12, p); const a = V(0, PED_TOP, 0).lerp(circ(0), k); a.y += Math.sin(Math.PI * k) * 0.5; return a; }
+  if (p < 0.88) return circ(((p - 0.12) / 0.76) * TAU);
+  const k = smooth(0.88, 1, p), a = circ(TAU).lerp(V(0, PED_TOP, 0), k); a.y += Math.sin(Math.PI * k) * 0.5; return a;
+}
+function computePose(st) {
+  const out = [], T = st.t;
+  let leapK = 0, pos = V(0, PED_TOP, 0), yaw = 0, gait = 0;
+  if (st.leap >= 0) { const p = st.leap; leapK = smooth(0, 0.06, p) * (1 - smooth(0.94, 1, p)); pos = leapPath(p);
+    const a = leapPath(Math.max(0, p - 0.004)), b = leapPath(Math.min(1, p + 0.004)), d = b.sub(a); yaw = Math.hypot(d.x, d.z) > 1e-5 ? Math.atan2(d.x, d.z) : 0; yaw *= smooth(0, 0.05, p) * (1 - smooth(0.95, 1, p));
+    gait = smooth(0.08, 0.14, p) * (1 - smooth(0.86, 0.92, p)); }
+  out.push(['Body', { p: pos, q: quatE(gait * -0.1, yaw, 0) }]);
+  const ph = TAU * T * 1.2, breath = Math.sin(TAU * T / 3) * 0.01;
+  const rear = st.awake * 0.6 + st.cry * 0.15;   // rearing up on the hind legs
+  out.push(['Hips', { p: V(0, 0.98 + breath + gait * 0.05 * Math.sin(ph), -0.42), q: quatE(-rear * 0.7, 0, 0) }]);
+  out.push(['Spine', { q: quatE(-0.1 + gait * 0.1 * Math.sin(ph), 0, 0) }]);
+  const body = -0.1 - rear * 0.7;
+  out.push(['Neck', { q: quatE(-0.95 - body * 0.5 - st.cry * 0.35 - st.shake * 0.1 * Math.sin(T * 40) + Math.sin(TAU * T / 6) * 0.03, st.look * 0.4 + st.shake * 0.25 * Math.sin(T * 25), 0) }]);
+  out.push(['Head', { q: quatE(0.9 + st.cry * 0.05 - rear * 0.2, st.look * 0.4, Math.sin(TAU * T / 6) * 0.03) }]);
+  out.push(['Jaw', { q: quatE(st.jaw * 0.45 + st.scroll * 0.15, 0, 0) }]);
+  out.push(['Mane', { s: V(1, 1, 1 + 0.12 * Math.sin(TAU * 5 * T / 6) + st.shake * 0.4 + st.awake * 0.3) }]);
+  // front legs: the right foreleg is raised in a proud prance
+  for (const s of [1, -1]) {
+    const nm = 'Leg_F' + (s > 0 ? 'L' : 'R'), lph = ph + (s > 0 ? 0 : 1.2);
+    let ux = 0.1 - body + gait * 0.8 * Math.sin(lph), lx = gait * Math.max(0, 1.2 * Math.sin(lph - 1)), hx = 0;
+    if (s < 0) { const pr = 0.75 * (1 - gait) * (1 - Math.min(1, rear * 2)); ux += -0.9 * pr; lx += 1.6 * pr; hx = 0.6 * pr; }
+    if (st.stamp >= 0 && s < 0) { const k = st.stamp, up = Math.sin(Math.PI * Math.min(1, k / 0.5)), down = smooth(0.4, 0.55, k); ux += -0.4 * up + 0.9 * down * (1 - smooth(0.6, 1, k)); lx += 0.4 * up - 1.6 * down * (1 - smooth(0.6, 1, k)); }
+    if (rear > 0) { ux += -1.2 * rear; lx += 1.4 * rear; }
+    out.push([nm, { q: quatE(ux, 0, 0) }]); out.push([nm + '_Low', { q: quatE(lx, 0, 0) }]); out.push([nm + '_Hoof', { q: quatE(hx + lx * -0.3, 0, 0) }]);
+  }
+  for (const s of [1, -1]) {
+    const nm = 'Leg_B' + (s > 0 ? 'L' : 'R'), lph = ph + Math.PI + (s > 0 ? 0 : 1.2);
+    const tx = -0.15 + gait * 0.7 * Math.sin(lph) + rear * 0.9, sx = 0.55 + gait * 0.4 * Math.max(0, Math.sin(lph + 1)) - rear * 0.2, fx = -0.4 - gait * 0.3 * Math.sin(lph) - rear * 0.2;
+    out.push([nm, { q: quatE(tx, 0, 0) }]); out.push([nm + '_Low', { q: quatE(sx, 0, 0) }]); out.push([nm + '_Foot', { q: quatE(fx, 0, 0) }]);
+  }
+  for (let i = 0; i < TAIL_N; i++) { const u = i / TAIL_N; out.push([tailNodes[i].name, { q: quatE((i === 0 ? -1.15 : 0.1) + gait * (i === 0 ? 0.7 : 0.02), Math.sin(TAU * T / 2.4 - u * 4) * (0.08 + 0.06 * u) + st.shake * 0.3 * Math.sin(T * 20 - u * 5), 0, 'YXZ') }]); }
+  out.push(['TailTuft', { s: V(1, 1, 1 + 0.15 * Math.sin(TAU * 4 * T / 6) + st.awake * 0.4) }]);
+  // jade scroll: emerges from the mouth, floats forward and unrolls
+  const sk = st.scroll, sOut = smooth(0, 0.25, sk) * (1 - smooth(0.85, 1, sk)), un = smooth(0.2, 0.4, sk) * (1 - smooth(0.8, 0.95, sk));
+  out.push(['Scroll', { p: V(0, 0.02 + sOut * 0.25, 0.3 + sOut * 0.35), s: V(0.01 + 0.99 * Math.max(un, sOut * 0.2), 0.01 + 0.99 * sOut, 0.01 + 0.99 * sOut) }]);
+  return out;
+}
+function nodeMapOf(r) { const m = {}; r.traverse(o => { if (o.name) m[o.name] = o; }); return m; }
+function applyPose(map, st) { for (const [n, tr] of computePose(st)) { const o = map[n]; if (!o) continue; if (tr.p) o.position.copy(tr.p); if (tr.q) o.quaternion.copy(tr.q); if (tr.s) o.scale.copy(tr.s); } }
+const live = nodeMapOf(root);
+applyPose(live, REST);
+document.getElementById('loading').remove();
+
+// ===== effects =====
+const SPARK_N = 500, sparkGeo = new THREE.BufferGeometry(), sparkPos = new Float32Array(SPARK_N * 3), sparkCol = new Float32Array(SPARK_N * 3);
+const sparks = Array.from({ length: SPARK_N }, () => ({ life: 0, max: 1, v: V(0, 0, 0), c: [1, 1, 1], g: 0 }));
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkCol, 3));
+scene.add(new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.08, map: DOT, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+let sparkIdx = 0;
+function spark(p, v, c, life = 1.2, g = 0) { const i = sparkIdx, s = sparks[i]; sparkIdx = (sparkIdx + 1) % SPARK_N; s.life = s.max = life; s.v.copy(v); s.c = c; s.g = g; sparkPos.set([p.x, p.y, p.z], i * 3); }
+const GOLD = [1, 0.82, 0.35], JADE = [0.4, 1, 0.8], LILAC = [0.75, 0.7, 1];
+const rings = [], ringGeo = new THREE.RingGeometry(0.92, 1, 64);
+function ring(color, y = 0.012) { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.y = y; m.scale.setScalar(0.8); scene.add(m); rings.push({ m, t: 0 }); }
+// sound — 宮調 (C pentatonic: C D E G A)
+let actx = null;
+function audio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+function tone(f, dur, vol, type = 'sine', delay = 0, glide = 0) { const a = audio(); if (!a) return; const t0 = a.currentTime + delay, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0); if (glide) o.frequency.exponentialRampToValueAtTime(glide, t0 + dur * 0.6); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.05); }
+function noise(dur, vol, type, freq, q = 1, delay = 0) { const a = audio(); if (!a) return; const len = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, len, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len); const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(); s.buffer = b; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.value = vol; s.connect(f).connect(g).connect(a.destination); s.start(a.currentTime + delay); }
+function cryCall() { tone(523, 1.4, 0.1, 'triangle', 0, 784); tone(784, 1.2, 0.06, 'sine', 0.35, 659); tone(262, 1.6, 0.06, 'sine'); }
+function stampSound() { noise(0.25, 0.6, 'lowpass', 300, 1, 0.3); tone(131, 0.5, 0.15, 'sine', 0.3); [1047, 1175, 1319].forEach((f, i) => tone(f, 0.8, 0.04, 'sine', 0.35 + i * 0.06)); }
+function chimes() { [1047, 1175, 1319, 1568, 1760].forEach((f, i) => tone(f, 1.4, 0.05, 'sine', i * 0.07)); }
+function guqin() { [262, 392, 523, 659, 784].forEach((f, i) => { tone(f, 2.4, 0.07, 'triangle', i * 0.25); tone(f * 2, 1.6, 0.025, 'sine', i * 0.25 + 0.02); }); }
+function gongChord() { [131, 196, 262, 294, 330, 392, 440].forEach((f, i) => tone(f, 3.2, 0.06, i % 2 ? 'triangle' : 'sine', i * 0.1)); }
+
+// ===== state & interaction =====
+const S = Object.assign({}, REST);
+const acts = [];
+function act(k, dur, fn, end) { if (acts.some(a => a.k === k)) return false; acts.push({ k, t: 0, dur, fn, end }); return true; }
+const busy = () => acts.some(a => a.k === 'leap' || a.k === 'awake');
+let glow = 0, affection = 0, happyT = 0, petStroke = 0;
+const fill = document.getElementById('fill'), hintEl = document.getElementById('hint'), toastEl = document.getElementById('toast');
+function toast(msg, small = false) { toastEl.textContent = msg; toastEl.classList.toggle('small', small); toastEl.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove('show'), small ? 3200 : 2800); }
+const env = (k, a = 0.85) => Math.sin(Math.PI * Math.min(1, k / a));
+const CLIPS = {
+  cry: [2.0, (k) => ({ cry: env(k), jaw: env(k) * 0.9 })],
+  stamp: [1.4, (k) => ({ stamp: k })],
+  shake: [1.6, (k) => ({ shake: env(k, 1) })],
+  scroll: [5.0, (k) => ({ scroll: k })],
+  awake: [3.0, (k) => ({ awake: env(k), cry: env(k) * 0.6, jaw: env(k) * 0.7 })],
+  leap: [7.5, (k) => ({ leap: k })],
+};
+function play(name, end) { const [d, fn] = CLIPS[name]; return act(name, d, (k, st) => Object.assign(st, fn(k)), end); }
+const wp = (n) => live[n].getWorldPosition(V(0, 0, 0));
+function onHead() { if (play('cry')) { cryCall(); glow = Math.max(glow, 1.5); } }
+function onHoof() { if (play('stamp')) { stampSound(); setTimeout(() => { ring(0xffd36a, PED_TOP + 0.02); const p = wp('Leg_FR_Hoof'); for (let i = 0; i < 40; i++) { const a = rand() * TAU; spark(p, V(Math.cos(a) * 0.7, 0.3 + rand() * 0.5, Math.sin(a) * 0.7), rand() < 0.5 ? GOLD : JADE, 1.2); } }, 420); } }
+function onBody() { if (play('shake')) { chimes(); for (let i = 0; i < 40; i++) setTimeout(() => spark(wp('Neck').add(V((rand() - 0.5) * 0.6, rand() * 0.4, (rand() - 0.5) * 0.6)), V((rand() - 0.5) * 0.8, 0.4 + rand() * 0.5, (rand() - 0.5) * 0.8), rand() < 0.5 ? GOLD : LILAC, 1.2), i * 20); } }
+function onAltar() { if (play('scroll')) { guqin(); glow = Math.max(glow, 1.8); setTimeout(() => toast('麒麟吐玉書・天下為公', true), 900); } }
+function leap() { if (busy()) return; play('leap'); }
+function awaken() { if (busy()) return; affection = 0; gongChord(); cryCall(); toast('麒麟護佑・中央戊己土'); for (let k = 0; k < 6; k++) setTimeout(() => ring(k % 2 ? 0xffd36a : 0x5ff0c0), k * 220); play('awake', () => play('leap')); }
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function hit(e) { ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const hs = ray.intersectObject(root, true); const h = hs.find(x => x.object.material !== flameMat && x.object.material !== maneMat) || hs[0]; return h ? { part: h.object.userData.part, point: h.point } : null; }
+let down = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { audio(); const h = hit(e); if (h) { controls.enabled = false; down = { lx: e.clientX, ly: e.clientY, part: h.part, point: h.point, moved: 0 }; } });
+addEventListener('pointermove', (e) => { if (!down) return; const d = Math.hypot(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; down.moved += d;
+  if (down.moved > 10) { const h = hit(e); if (h) { affection = Math.min(1, affection + d / 2600); happyT = 0.6; glow = Math.max(glow, 0.9); petStroke += d;
+    if (rand() < 0.5) spark(h.point, V((rand() - 0.5) * 0.3, 0.3 + rand() * 0.4, (rand() - 0.5) * 0.3), rand() < 0.5 ? GOLD : JADE, 1);
+    if (petStroke > 380) { petStroke = 0; tone([523, 587, 659, 784, 880][Math.floor(rand() * 5)], 0.6, 0.05); }
+    if (affection >= 1) awaken(); } } });
+addEventListener('pointerup', () => { if (down && down.moved < 10 && !busy()) { hintEl.style.opacity = 0; ({ head: onHead, hoof: onHoof, body: onBody, altar: onAltar }[down.part] || onBody)(); affection = Math.min(1, affection + 0.06); if (affection >= 1) awaken(); } down = null; controls.enabled = true; });
+document.getElementById('bRun').onclick = () => { audio(); leap(); };
+document.getElementById('bAwake').onclick = () => { audio(); awaken(); };
+const bSpin = document.getElementById('bSpin'); bSpin.onclick = () => { controls.autoRotate = !controls.autoRotate; controls.autoRotateSpeed = 1.0; bSpin.classList.toggle('on', controls.autoRotate); };
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ===== GLB =====
+function buildClips() {
+  const FPS = 15;
+  function bake(name, dur, stFn) { const n = Math.round(dur * FPS), tracks = {};
+    for (let i = 0; i <= n; i++) { const t = i / FPS, st = Object.assign({}, REST, { t }, stFn(t / dur));
+      for (const [node, tr] of computePose(st)) for (const key of ['p', 'q', 's']) if (tr[key]) { const id = node + key; (tracks[id] ||= { node, key, times: [], vals: [] }); tracks[id].times.push(t); tracks[id].vals.push(...tr[key].toArray()); } }
+    const out = []; for (const tr of Object.values(tracks)) { const w = tr.key === 'q' ? 4 : 3, v = tr.vals; let varies = false; for (let i = w; i < v.length && !varies; i++) if (Math.abs(v[i] - v[i % w]) > 1e-4) varies = true; if (!varies) continue;
+      out.push(tr.key === 'q' ? new THREE.QuaternionKeyframeTrack(tr.node + '.quaternion', tr.times, v) : new THREE.VectorKeyframeTrack(tr.node + (tr.key === 'p' ? '.position' : '.scale'), tr.times, v)); }
+    return new THREE.AnimationClip(name, dur, out); }
+  return [bake('Idle', 6, () => ({ look: 0 })), bake('Cry', ...CLIPS.cry), bake('Stamp', ...CLIPS.stamp), bake('Shake', ...CLIPS.shake), bake('Scroll', ...CLIPS.scroll), bake('Leap', ...CLIPS.leap), bake('Awaken', ...CLIPS.awake)];
+}
+function buildExportScene() { const clone = root.clone(true); applyPose(nodeMapOf(clone), REST); const mc = new Map();
+  clone.traverse(o => { if (!o.isMesh || Array.isArray(o.material)) return; const m0 = o.material; if (m0.userData.baseEmissive !== undefined) { if (!mc.has(m0.uuid)) { const m = m0.clone(); m.emissiveIntensity = m0.userData.baseEmissive; mc.set(m0.uuid, m); } o.material = mc.get(m0.uuid); } });
+  const s = new THREE.Scene(); s.add(clone); return s; }
+function exportGLB() { return new Promise((res, rej) => new GLTFExporter().parse(buildExportScene(), res, rej, { binary: true, maxTextureSize: 1024, animations: buildClips() })); }
+window.__exportGLB = async () => { const u = new Uint8Array(await exportGLB()); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); };
+window.__tap = (p) => ({ head: onHead, hoof: onHoof, body: onBody, altar: onAltar })[p](); window.__awaken = awaken; window.__run = leap;
+window.__cam = (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); controls.target.set(tx, ty, tz); };
+let dl = null; try { if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {}); } catch (e) {}
+document.getElementById('bExport').onclick = async () => { toast('正在產生模型…', true);
+  try { const buf = await exportGLB();
+    if (dl) { const zip = zipSync({ 'qilin.glb': [new Uint8Array(buf), { level: 0 }] }); try { await dl.save({ filename: 'qilin-glb.zip', data: zip }); toast('已下載 qilin-glb.zip，解壓後即是 qilin.glb', true); } catch (e) { toast(e && e.code === 'declined' ? '已取消下載' : '這裡無法下載：' + (e && e.code || ''), true); } }
+    else if (window.claude) toast('此預覽畫面不支援下載', true);
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' })); a.download = 'qilin.glb'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('已下載 qilin.glb', true); }
+  } catch (e) { toast('匯出失敗：' + e.message, true); } };
+
+// ===== loop =====
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  Object.assign(S, REST, { t }); S.look = Math.sin(t * 0.35) * 0.35;
+  for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; a.t += dt; const k = Math.min(1, a.t / a.dur); a.fn(k, S); if (k >= 1) { acts.splice(i, 1); if (a.end) a.end(); } }
+  if (happyT > 0) { S.shake = Math.max(S.shake, 0.15); happyT -= dt; }
+  applyPose(live, S);
+  glow = Math.max(0, glow - dt * 1.3); const g = glow + S.awake * 2.5 + S.scroll * 0.5;
+  for (const m of glowMats) m.emissiveIntensity = m.userData.baseEmissive * (1 + Math.min(g, 2.5) * (m === flameMat || m === maneMat ? 0.35 : 0.8));
+  glowLight.intensity = g * 2.5; glowLight.position.copy(wp('Head')).add(V(0, 0.2, 0.5));
+  if (S.awake > 0.3 && rand() < 0.7) { const p = wp('Spine'); spark(p.add(V((rand() - 0.5) * 1.2, rand() * 0.8, (rand() - 0.5) * 1.2)), V(0, 0.5, 0), rand() < 0.5 ? GOLD : JADE, 1.2); }
+  if (S.leap > 0.1 && S.leap < 0.9 && rand() < 0.8) { for (const h of ['Leg_FL_Hoof', 'Leg_FR_Hoof']) spark(wp(h), V((rand() - 0.5) * 0.2, -0.1, (rand() - 0.5) * 0.2), rand() < 0.5 ? GOLD : JADE, 1.0); }
+  if (rand() < 0.08) spark(wp('Horn'), V((rand() - 0.5) * 0.2, 0.3, (rand() - 0.5) * 0.2), JADE, 1.0);
+  affection = Math.max(0, affection - dt * 0.01); fill.style.width = (affection * 100).toFixed(1) + '%';
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.t += dt; r.m.scale.setScalar(0.8 + r.t * 2.6); r.m.material.opacity = Math.max(0, 0.85 * (1 - r.t / 1.6)); if (r.t > 1.6) { scene.remove(r.m); r.m.material.dispose(); rings.splice(i, 1); } }
+  for (let i = 0; i < SPARK_N; i++) { const s = sparks[i]; if (s.life > 0) { s.life -= dt; s.v.y += s.g * dt; sparkPos[i * 3] += s.v.x * dt; sparkPos[i * 3 + 1] += s.v.y * dt; sparkPos[i * 3 + 2] += s.v.z * dt; const f = Math.max(0, s.life / s.max); sparkCol[i * 3] = s.c[0] * f; sparkCol[i * 3 + 1] = s.c[1] * f; sparkCol[i * 3 + 2] = s.c[2] * f; } else sparkCol[i * 3] = sparkCol[i * 3 + 1] = sparkCol[i * 3 + 2] = 0; }
+  sparkGeo.attributes.position.needsUpdate = sparkGeo.attributes.color.needsUpdate = true;
+  controls.update(); renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

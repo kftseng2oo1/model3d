@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>3D 陸龜模型</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#e9dcc6;font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;-webkit-user-select:none;user-select:none;touch-action:none}
+  canvas{display:block}
+  #title{position:fixed;top:14px;left:16px;color:#4a3720;pointer-events:none}
+  #title h1{margin:0;font-size:20px;letter-spacing:2px}
+  #title p{margin:2px 0 0;font-size:12px;opacity:.7}
+  #ui{position:fixed;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
+  #ui button{border:none;border-radius:22px;padding:10px 16px;font-size:15px;background:rgba(255,250,240,.88);color:#4a3720;box-shadow:0 2px 8px rgba(60,40,10,.18);-webkit-tap-highlight-color:transparent;cursor:pointer}
+  #ui button.on{background:#5c6b2a;color:#fff8e6}
+  #toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:rgba(60,45,20,.88);color:#fff8e6;padding:8px 14px;border-radius:16px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;max-width:86vw;text-align:center}
+  #toast.show{opacity:1}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#5c4a30;font-size:16px}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}
+</script>
+</head>
+<body>
+<div id="loading">雕刻龜殼中…</div>
+<div id="title"><h1>🐢 陸龜</h1><p>拖曳旋轉・雙指縮放</p></div>
+<div id="ui">
+  <button id="bWalk">散步</button>
+  <button id="bHide">縮頭</button>
+  <button id="bSpin">自動旋轉</button>
+  <button id="bReset">重設視角</button>
+  <button id="bExport">匯出 .glb</button>
+</div>
+<div id="toast"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { zipSync } from 'fflate';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe9dcc6);
+scene.fog = new THREE.Fog(0xe9dcc6, 7, 16);
+
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 50);
+const HOME = new THREE.Vector3(2.6, 1.9, 3.4);
+camera.position.copy(HOME);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.45, 0);
+controls.enableDamping = true;
+controls.minDistance = 1.5; controls.maxDistance = 9;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+// ---------- lights ----------
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x8a6a40, 0.9));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.4);
+sun.position.set(3, 6, 2.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 20 });
+sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+const rim = new THREE.DirectionalLight(0xd8e6ff, 0.6);
+rim.position.set(-3, 2, -3);
+scene.add(rim);
+
+// ---------- helpers ----------
+const rand = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mix = (a, b, t) => a + (b - a) * t;
+function hexRGB(h) { return [(h >> 16) & 255, (h >> 8) & 255, h & 255]; }
+function canvasTex(w, h, fn, color = true) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); const img = ctx.createImageData(w, h);
+  fn(img.data, w, h); ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  if (color) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+
+function heightToNormal(hArr, w, h, strength) {
+  const at = (x, y) => hArr[((y + h) % h) * w + ((x + w) % w)];
+  const tex = canvasTex(w, h, (d) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let nx = -(at(x + 1, y) - at(x - 1, y)) * strength, ny = -(at(x, y - 1) - at(x, y + 1)) * strength, nz = 1;
+      const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      const i = (y * w + x) * 4;
+      d[i] = (nx * 0.5 + 0.5) * 255; d[i + 1] = (ny * 0.5 + 0.5) * 255; d[i + 2] = (nz * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+  }, false);
+  return tex;
+}
+
+// ---------- wooden table ----------
+function woodTextures() {
+  const W = 1024, H = 1024;
+  const grain = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const w = Math.sin(x * 0.003 + Math.sin(y * 0.004) * 1.2) * 10;
+    const g = Math.pow(Math.sin((y + w) * 0.05 + Math.sin(x * 0.006) * 1.5) * 0.5 + 0.5, 3);
+    const fine = Math.sin((y + w * 0.5) * 0.9 + Math.sin(x*0.02)) * 0.5 + 0.5;
+    grain[y * W + x] = g * 0.6 + fine * 0.15;
+  }
+  const map = canvasTex(W, H, (d) => {
+    for (let i = 0; i < W * H; i++) {
+      const g = grain[i], n = rand() * 0.06;
+      d[i * 4] = mix(222, 196, g) - n * 60; d[i * 4 + 1] = mix(182, 150, g) - n * 60; d[i * 4 + 2] = mix(132, 100, g) - n * 50; d[i * 4 + 3] = 255;
+    }
+  });
+  map.wrapS = map.wrapT = THREE.RepeatWrapping; map.repeat.set(2, 2);
+  return map;
+}
+const table = new THREE.Mesh(new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ map: woodTextures(), roughness: 0.75 }));
+table.rotation.x = -Math.PI / 2; table.receiveShadow = true;
+scene.add(table);
+
+// ---------- skin texture (scaly) ----------
+function skinTextures() {
+  const S = 512, G = 14, cell = S / G;
+  const pts = [];
+  for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++)
+    pts.push([(gx + 0.15 + rand() * 0.7) * cell, (gy + 0.15 + rand() * 0.7) * cell, rand()]);
+  const P = (gx, gy) => pts[((gy + G) % G) * G + ((gx + G) % G)];
+  const edge = new Float32Array(S * S), tone = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
+    let d1 = 1e9, d2 = 1e9, id = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const p = P(cx + ox, cy + oy);
+      const qx = (cx + ox) * cell + (p[0] - ((((cx + ox) % G) + G) % G) * cell);
+      const qy = (cy + oy) * cell + (p[1] - ((((cy + oy) % G) + G) % G) * cell);
+      const d = Math.hypot(x - qx, y - qy);
+      if (d < d1) { d2 = d1; d1 = d; id = p[2]; } else if (d < d2) d2 = d;
+    }
+    edge[y * S + x] = Math.min(1, (d2 - d1) / (cell * 0.35));
+    tone[y * S + x] = id;
+  }
+  const map = canvasTex(S, S, (d) => {
+    for (let i = 0; i < S * S; i++) {
+      const e = smooth(0, 0.35, edge[i]), t = tone[i], n = rand() * 10;
+      const base = [mix(110, 140, t), mix(108, 124, t), mix(70, 78, t)];
+      const hi = 0.85 + 0.25 * edge[i];
+      d[i * 4] = mix(52, base[0] * hi, e) + n; d[i * 4 + 1] = mix(48, base[1] * hi, e) + n; d[i * 4 + 2] = mix(30, base[2] * hi, e) + n * 0.6; d[i * 4 + 3] = 255;
+    }
+  });
+  const hgt = new Float32Array(S * S);
+  for (let i = 0; i < S * S; i++) hgt[i] = Math.sqrt(edge[i]);
+  const normal = heightToNormal(hgt, S, S, 2.2);
+  for (const t of [map, normal]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return { map, normal };
+}
+const skinTex = skinTextures();
+function skinMat(rx, ry) {
+  const m = skinTex.map.clone(), b = skinTex.normal.clone();
+  m.repeat.set(rx, ry); b.repeat.set(rx, ry); m.needsUpdate = b.needsUpdate = true;
+  const mat = new THREE.MeshStandardMaterial({ map: m, normalMap: b, roughness: 0.72, name: 'skin' });
+  mat.userData.skin = true;
+  return mat;
+}
+
+// ---------- carapace ----------
+const SX = 1.0, SY = 0.86, SZ = 1.28, TH = Math.PI * 0.55;
+const dirV = (thDeg, azDeg) => {
+  const t = thDeg * Math.PI / 180, a = azDeg * Math.PI / 180;
+  return new THREE.Vector3(Math.sin(a) * Math.sin(t) * SX, Math.cos(t) * SY, Math.cos(a) * Math.sin(t) * SZ);
+};
+const centers = [];
+// vertebral (midline)
+[[60, 0], [30, 0], [0, 0], [30, 180], [58, 180]].forEach(([t, a]) => centers.push(dirV(t, a)));
+// costal (4 per side)
+[40, 74, 108, 142].forEach(a => { centers.push(dirV(56, a)); centers.push(dirV(56, -a)); });
+// marginals around the rim
+for (let k = 0; k < 24; k++) centers.push(dirV(90, 7.5 + k * 15));
+const CN = centers.map(v => [v.x, v.y, v.z]);
+
+function scuteInfo(x, y, z) {
+  let d1 = 1e9, d2 = 1e9, idx = 0;
+  for (let i = 0; i < CN.length; i++) {
+    const c = CN[i], d = (x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2;
+    if (d < d1) { d2 = d1; d1 = d; idx = i; } else if (d < d2) d2 = d;
+  }
+  d1 = Math.sqrt(d1); d2 = Math.sqrt(d2);
+  const border = (d2 - d1) * 0.5;
+  return { t: border / (border + d1 + 1e-6), idx };
+}
+const ringCols = [0x4f6a2a, 0x3a2a1a, 0x5d4026, 0x2c4424, 0x6e7a32, 0x241c12, 0x55402a, 0x3b5a2c, 0x1d1810].map(hexRGB);
+const yellow = hexRGB(0xd8b62a), yellow2 = hexRGB(0xe6cc4a);
+
+function shellPoint(u, v) { // v: 0 top -> 1 bottom
+  const phi = u * Math.PI * 2, th = v * TH;
+  return [-Math.cos(phi) * Math.sin(th) * SX, Math.cos(th) * SY, Math.sin(phi) * Math.sin(th) * SZ, th];
+}
+
+function shellTextures() {
+  const W = 1536, H = 640;
+  const bumpArr = new Float32Array(W * H);
+  const map = canvasTex(W, H, (d) => {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const [px, py, pz, th] = shellPoint(x / W, y / H);
+        const { t, idx } = scuteInfo(px, py, pz);
+        const jitter = (Math.sin(x * 0.9 + y * 0.31) * 0.5 + Math.sin(x * 0.23 - y * 1.7) * 0.5) * 0.012;
+        const tt = Math.max(0, t + jitter);
+        let col, b;
+        const areola = idx < 13 ? 0.72 : 0.78;
+        if (tt > areola) {
+          const k = smooth(areola, areola + 0.12, tt);
+          col = [mix(yellow[0], yellow2[0], k), mix(yellow[1], yellow2[1], k), mix(yellow[2], yellow2[2], k)];
+          // greenish streaks inside the yellow patch
+          const s = Math.sin(tt * 90 + idx) * 0.5 + 0.5;
+          col = col.map((c, i) => mix(c, [120, 140, 50][i], s * 0.25 * (1 - k)));
+          b = 0.85 + 0.15 * k;
+        } else {
+          const rings = 9, f = (tt / areola) * rings;
+          const ri = Math.min(rings - 1, Math.floor(f)), fr = f - ri;
+          const c = ringCols[(ri + idx) % ringCols.length];
+          const line = smooth(0.0, 0.3, fr) * smooth(1.0, 0.7, fr);
+          col = c.map(v => v * (0.55 + 0.45 * line) + (rand() - 0.5) * 14);
+          if (ri === rings - 1) col = col.map((v, i) => mix(v, yellow[i], 0.35 * fr));
+          b = 0.25 + 0.55 * (tt / areola) + 0.12 * line;
+        }
+        // dark seams between scutes
+        const seam = smooth(0.0, 0.035, tt);
+        col = col.map(v => v * (0.25 + 0.75 * seam));
+        b *= seam;
+        // yellow lower rim of marginals
+        const low = smooth(84 * Math.PI / 180, 98 * Math.PI / 180, th);
+        col = col.map((v, i) => mix(v, yellow[i] * (0.6 + 0.4 * seam), low * 0.85));
+        const i4 = (y * W + x) * 4;
+        d[i4] = col[0]; d[i4 + 1] = col[1]; d[i4 + 2] = col[2]; d[i4 + 3] = 255;
+        bumpArr[y * W + x] = b;
+      }
+    }
+  });
+  const normal = heightToNormal(bumpArr, W, H, 3.0);
+  normal.wrapS = THREE.RepeatWrapping;
+  return { map, normal };
+}
+
+function buildShell() {
+  const geo = new THREE.SphereGeometry(1, 384, 160, 0, Math.PI * 2, 0, TH);
+  const pos = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < pos.count; i++) {
+    const u = uv.getX(i), v = 1 - uv.getY(i);
+    const [x, y, z, th] = shellPoint(u, v);
+    const { t } = scuteInfo(x, y, z);
+    // grooves between scutes + raised areola + rim flare
+    let r = 1 - 0.028 * (1 - smooth(0, 0.09, t)) + 0.012 * smooth(0.5, 0.8, t);
+    r += 0.07 * smooth(70 * Math.PI / 180, 100 * Math.PI / 180, th);
+    // slightly flatter top, taller back
+    const yy = y * (1 - 0.08 * smooth(0, 0.6, y / SY)) + (z < 0 ? -z * 0.04 : 0);
+    pos.setXYZ(i, x * r, yy * (th > 1.3 ? 1 : r), z * r);
+  }
+  geo.computeVertexNormals();
+  const tex = shellTextures();
+  const mat = new THREE.MeshStandardMaterial({ name: 'carapace', map: tex.map, normalMap: tex.normal, roughness: 0.42, metalness: 0.02, side: THREE.DoubleSide });
+  const m = new THREE.Mesh(geo, mat);
+  m.name = 'Carapace';
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+// ---------- assemble tortoise ----------
+const tortoise = new THREE.Group();
+tortoise.name = 'Tortoise';
+scene.add(tortoise);
+const body = new THREE.Group();
+body.name = 'Body';
+tortoise.add(body);
+const SHELL_Y = 0.54;
+
+setTimeout(() => {
+  const shell = buildShell();
+  shell.position.y = SHELL_Y;
+  body.add(shell);
+
+  // plastron (yellow belly plate) + inner body
+  const plast = new THREE.Mesh(new THREE.CylinderGeometry(1, 0.96, 0.1, 64),
+    new THREE.MeshStandardMaterial({ color: 0xc7a233, roughness: 0.5 }));
+  plast.name = 'Plastron'; plast.material.name = 'plastron';
+  plast.scale.set(0.9, 1, 1.18); plast.position.y = SHELL_Y - 0.12;
+  plast.castShadow = true; body.add(plast);
+  const inner = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24), new THREE.MeshStandardMaterial({ color: 0x3b3322, roughness: 0.9 }));
+  inner.name = 'InnerBody'; inner.scale.set(0.95, 0.35, 1.22); inner.position.y = SHELL_Y - 0.02; body.add(inner);
+
+  buildLimbs();
+  buildHead();
+  buildTail();
+  document.getElementById('loading').remove();
+}, 30);
+
+const clawMat = new THREE.MeshStandardMaterial({ name: 'claw', color: 0xb9ad94, roughness: 0.35 });
+const legs = [];
+function makeLeg(front, side) {
+  const pivot = new THREE.Group();
+  const len = SHELL_Y + 0.02;
+  const r1 = front ? 0.2 : 0.21, r2 = front ? 0.16 : 0.19;
+  const legGeo = new THREE.CylinderGeometry(r1, r2, len, 32, 8);
+  legGeo.translate(0, -len / 2, 0);
+  // bulge
+  const p = legGeo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const k = 1 + 0.12 * Math.sin((-p.getY(i) / len) * Math.PI);
+    p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * (front ? k * 1.1 : k));
+  }
+  legGeo.computeVertexNormals();
+  const leg = new THREE.Mesh(legGeo, skinMat(2.4, 2));
+  leg.castShadow = true; pivot.add(leg);
+  // foot pad
+  const foot = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 16), skinMat(2, 2));
+  foot.scale.set(1.05, 0.45, front ? 1.05 : 0.95);
+  foot.position.set(0, -len + 0.04, front ? 0.04 : 0);
+  foot.castShadow = true; pivot.add(foot);
+  // claws
+  const n = front ? 5 : 4;
+  for (let i = 0; i < n; i++) {
+    const a = (i / (n - 1) - 0.5) * (front ? 1.5 : 1.2);
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 12), clawMat);
+    claw.position.set(Math.sin(a) * 0.19, -len + 0.03, Math.cos(a) * 0.17 + (front ? 0.04 : 0));
+    claw.rotation.set(Math.PI / 2 + 0.35, 0, -a);
+    claw.rotation.order = 'YXZ'; claw.rotation.y = a; claw.rotation.x = Math.PI / 2 + 0.4;
+    claw.castShadow = true; pivot.add(claw);
+  }
+  pivot.name = (front ? 'Leg_Front_' : 'Leg_Back_') + (side > 0 ? 'L' : 'R');
+  pivot.position.set(side * 0.6, SHELL_Y, front ? 0.7 : -0.7);
+  const bz = side * (front ? 0.28 : 0.2);
+  pivot.rotation.z = bz;
+  pivot.userData = { front, side, baseZ: bz };
+  body.add(pivot);
+  legs.push(pivot);
+}
+function buildLimbs() { makeLeg(true, 1); makeLeg(true, -1); makeLeg(false, 1); makeLeg(false, -1); }
+
+const neck = new THREE.Group();
+neck.name = 'Neck';
+let headGroup, lids = [];
+function buildHead() {
+  neck.position.set(0, SHELL_Y - 0.04, 1.0);
+  body.add(neck);
+  // neck: wrinkled tube
+  const nGeo = new THREE.CylinderGeometry(0.15, 0.21, 0.75, 32, 12, true);
+  nGeo.rotateX(Math.PI / 2);
+  const np = nGeo.attributes.position;
+  for (let i = 0; i < np.count; i++) { const k = 1 + 0.05 * Math.sin(np.getZ(i) * 40); np.setX(i, np.getX(i) * k); np.setY(i, np.getY(i) * k); }
+  nGeo.computeVertexNormals();
+  const neckMesh = new THREE.Mesh(nGeo, skinMat(4, 2.5));
+  neckMesh.position.set(0, 0.1, 0.2); neckMesh.rotation.x = -0.4; neckMesh.castShadow = true;
+  neck.add(neckMesh);
+
+  headGroup = new THREE.Group();
+  headGroup.name = 'Head';
+  headGroup.position.set(0, 0.26, 0.58);
+  neck.add(headGroup);
+  const hm = skinMat(3, 2.4);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.2, 48, 32), hm);
+  skull.scale.set(0.95, 0.85, 1.1); skull.castShadow = true; headGroup.add(skull);
+  const snout = new THREE.Mesh(new THREE.SphereGeometry(0.14, 40, 24), hm);
+  snout.scale.set(0.95, 0.85, 1.1); snout.position.set(0, -0.025, 0.14); snout.castShadow = true; headGroup.add(snout);
+  // beak line
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.007, 8, 40, Math.PI), new THREE.MeshStandardMaterial({ color: 0x2a2416, roughness: 0.6 }));
+  lip.rotation.set(Math.PI / 2 + 0.25, 0, Math.PI); lip.position.set(0, -0.075, 0.13); lip.scale.set(1, 1.25, 1);
+  headGroup.add(lip);
+  // nostrils
+  for (const s of [-1, 1]) {
+    const no = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshStandardMaterial({ color: 0x15110a }));
+    no.position.set(s * 0.03, 0.02, 0.285); headGroup.add(no);
+  }
+  // eyes
+  const eyeMat = new THREE.MeshPhysicalMaterial({ color: 0x1a120a, roughness: 0.05, clearcoat: 1 });
+  const irisMat = new THREE.MeshStandardMaterial({ color: 0x6b4a22, roughness: 0.3 });
+  for (const s of [-1, 1]) {
+    const eg = new THREE.Group();
+    eg.position.set(s * 0.15, 0.045, 0.1);
+    eg.rotation.y = s * 0.75;
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.048, 24, 16), irisMat); eg.add(iris);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.032, 24, 16), eyeMat); pupil.position.z = 0.017; eg.add(pupil);
+    const lid = new THREE.Mesh(new THREE.TorusGeometry(0.047, 0.016, 10, 28), hm); lid.position.z = 0.008; eg.add(lid);
+    const cover = new THREE.Mesh(new THREE.SphereGeometry(0.05, 24, 16), hm); cover.scale.y = 0.02; cover.position.z = 0.006; eg.add(cover);
+    cover.name = 'Eyelid_' + (s > 0 ? 'L' : 'R');
+    lids.push(cover);
+    headGroup.add(eg);
+  }
+}
+function buildTail() {
+  const g = new THREE.ConeGeometry(0.1, 0.32, 20, 6);
+  g.rotateX(-Math.PI / 2);
+  const tail = new THREE.Mesh(g, skinMat(2, 2));
+  tail.name = 'Tail';
+  tail.position.set(0, SHELL_Y - 0.1, -1.3); tail.rotation.x = 0.35; tail.castShadow = true;
+  body.add(tail);
+}
+
+// ---------- interaction ----------
+let walking = false, hidden = false, spin = false;
+const bWalk = document.getElementById('bWalk'), bHide = document.getElementById('bHide'), bSpin = document.getElementById('bSpin');
+bWalk.onclick = () => { walking = !walking; bWalk.classList.toggle('on', walking); bWalk.textContent = walking ? '停下' : '散步'; if (walking && hidden) bHide.click(); };
+bHide.onclick = () => { hidden = !hidden; bHide.classList.toggle('on', hidden); bHide.textContent = hidden ? '探頭' : '縮頭'; if (hidden && walking) bWalk.click(); };
+bSpin.onclick = () => { spin = !spin; bSpin.classList.toggle('on', spin); controls.autoRotate = spin; controls.autoRotateSpeed = 1.2; };
+document.getElementById('bReset').onclick = () => { camera.position.copy(HOME); controls.target.set(0, 0.45, 0); };
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+
+
+// ---------- animation clips for GLB ----------
+function buildClips() {
+  const FPS = 30;
+  const q = new THREE.Quaternion(), e = new THREE.Euler();
+  const quat = (x, y, z) => q.setFromEuler(e.set(x, y, z)).toArray();
+  const sample = (dur, fn) => { const n = Math.round(dur * FPS); const times = [], vals = []; for (let i = 0; i <= n; i++) { const t = i / FPS; times.push(t); vals.push(...fn(t, t / dur)); } return [times, vals]; };
+  const QT = (name, dur, fn) => new THREE.QuaternionKeyframeTrack(name + '.quaternion', ...sample(dur, fn));
+  const VT = (name, prop, dur, fn) => new THREE.VectorKeyframeTrack(name + '.' + prop, ...sample(dur, fn));
+  const legDefs = [['Leg_Front_L', true, 1], ['Leg_Front_R', true, -1], ['Leg_Back_L', false, 1], ['Leg_Back_R', false, -1]];
+  const baseZ = (front, side) => side * (front ? 0.28 : 0.2);
+  const NECK = [0, SHELL_Y - 0.04, 1.0];
+  const TAU = Math.PI * 2;
+
+  // Walk: in-place loop, diagonal legs move together
+  const WD = 1.6, walk = [];
+  for (const [n, front, side] of legDefs) {
+    const off = (front ? 1 : -1) * side > 0 ? 0 : Math.PI;
+    walk.push(QT(n, WD, (t, k) => quat(Math.sin(k * TAU + off) * 0.38, 0, baseZ(front, side))));
+  }
+  walk.push(VT('Body', 'position', WD, (t, k) => [0, Math.abs(Math.sin(k * TAU)) * 0.025, 0]));
+  walk.push(QT('Body', WD, (t, k) => quat(0, 0, Math.sin(k * TAU) * 0.02)));
+  walk.push(QT('Head', WD, (t, k) => quat(Math.sin(k * TAU * 2) * 0.05, 0, 0)));
+
+  // Idle: look left/right, gentle nod, one blink
+  const ID = 6, idle = [];
+  idle.push(QT('Head', ID, (t, k) => quat(Math.sin(k * TAU * 2) * 0.06, Math.sin(k * TAU) * 0.45, 0)));
+  const blinkAt = (t, at) => { const x = (t - at) / 0.22; return x > 0 && x < 1 ? Math.sin(x * Math.PI) : 0; };
+  for (const n of ['Eyelid_L', 'Eyelid_R']) idle.push(VT(n, 'scale', ID, (t) => [1, 0.02 + 0.98 * Math.max(blinkAt(t, 2.2), blinkAt(t, 4.6)), 1]));
+
+  // Blink
+  const BD = 0.25, blink = [];
+  for (const n of ['Eyelid_L', 'Eyelid_R']) blink.push(VT(n, 'scale', BD, (t, k) => [1, 0.02 + 0.98 * Math.sin(k * Math.PI), 1]));
+
+  // Retract: head and legs pull into the shell (play once; reverse to come out)
+  const RD = 1.0, retract = [];
+  const ease = (k) => k * k * (3 - 2 * k);
+  retract.push(VT('Neck', 'position', RD, (t, k) => { const h = ease(k); return [0, NECK[1] - h * 0.08, NECK[2] - h * 0.55]; }));
+  for (const n of ['Eyelid_L', 'Eyelid_R']) retract.push(VT(n, 'scale', RD, (t, k) => [1, 0.02 + 0.98 * ease(Math.min(1, k * 2)), 1]));
+  for (const [n, front, side] of legDefs) {
+    retract.push(QT(n, RD, (t, k) => quat(0, 0, baseZ(front, side) - side * ease(k) * 0.25)));
+    retract.push(VT(n, 'position', RD, (t, k) => [side * 0.6, SHELL_Y + ease(k) * 0.06, front ? 0.7 : -0.7]));
+  }
+  retract.push(VT('Body', 'position', RD, (t, k) => [0, -ease(k) * 0.06, 0]));
+
+  return [
+    new THREE.AnimationClip('Walk', WD, walk),
+    new THREE.AnimationClip('Idle', ID, idle),
+    new THREE.AnimationClip('Blink', BD, blink),
+    new THREE.AnimationClip('Retract', RD, retract),
+  ];
+}
+
+// ---------- GLB export ----------
+function buildExportScene() {
+  const clone = tortoise.clone(true);
+  clone.position.set(0, 0, 0); clone.rotation.set(0, 0, 0);
+  clone.traverse(o => {
+    if (o.name === 'Body') { o.position.set(0, 0, 0); o.rotation.set(0, 0, 0); }
+    if (o.name === 'Neck') { o.position.set(0, SHELL_Y - 0.04, 1.0); }
+    if (o.name === 'Head') { o.rotation.set(0, 0, 0); }
+    if (o.name.startsWith('Leg_')) { o.rotation.x = 0; o.position.y = SHELL_Y; }
+    if (o.name.startsWith('Eyelid_')) o.scale.y = 0.02;
+    if (o.isMesh && o.material.userData.skin) {
+      // bake texture repeat into UVs so every 3D app shows the same scale
+      const rep = o.material.map.repeat;
+      const g = o.geometry.clone(); const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * rep.x, uv.getY(i) * rep.y);
+      o.geometry = g;
+      const m = o.material.clone();
+      m.map = skinTex.map; m.normalMap = skinTex.normal; m.name = 'skin';
+      o.material = m;
+    }
+  });
+  const s = new THREE.Scene(); s.add(clone);
+  return s;
+}
+function exportGLB() {
+  return new Promise((res, rej) => new GLTFExporter().parse(buildExportScene(), res, rej, { binary: true, maxTextureSize: 2048, animations: buildClips() }));
+}
+window.__exportGLB = async () => {
+  const buf = await exportGLB();
+  let bin = ''; const u = new Uint8Array(buf);
+  for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+const toastEl = document.getElementById('toast');
+function toast(msg) { toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove('show'), 3500); }
+let dl = null;
+try { if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {}); } catch (e) {}
+document.getElementById('bExport').onclick = async () => {
+  toast('正在產生模型…');
+  try {
+    const buf = await exportGLB();
+    if (dl) {
+      const zip = zipSync({ 'tortoise.glb': [new Uint8Array(buf), { level: 0 }] });
+      try { await dl.save({ filename: 'tortoise-glb.zip', data: zip }); toast('已下載 tortoise-glb.zip，解壓後即是 tortoise.glb'); }
+      catch (e) { toast(e && e.code === 'declined' ? '已取消下載' : '這裡無法下載：' + (e && e.code || '')); }
+    } else if (window.claude) {
+      toast('此預覽畫面不支援下載');
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' }));
+      a.download = 'tortoise.glb'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast('已下載 tortoise.glb');
+    }
+  } catch (e) { toast('匯出失敗：' + e.message); }
+};
+
+// ---------- animation ----------
+const clock = new THREE.Clock();
+let walkPhase = 0, pathAngle = 0, hideK = 0, nextBlink = 2, blinkT = -1;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+
+  if (walking) {
+    walkPhase += dt * 3.2;
+    pathAngle += dt * 0.12;
+    const R = 1.6;
+    tortoise.position.set(Math.sin(pathAngle) * R - 0, 0, Math.cos(pathAngle) * R - R);
+    tortoise.rotation.y = pathAngle + Math.PI / 2;
+  }
+  const walkAmt = walking ? 1 : 0;
+  legs.forEach(l => {
+    const { front, side, baseZ } = l.userData;
+    const ph = walkPhase + ((front ? 1 : -1) * side > 0 ? 0 : Math.PI);
+    const tgtX = walkAmt * Math.sin(ph) * 0.38;
+    l.rotation.x += (tgtX - l.rotation.x) * 0.25;
+    const tuck = hideK * 0.25;
+    l.rotation.z = baseZ - side * tuck;
+    l.position.y = SHELL_Y + hideK * 0.06;
+  });
+  body.position.y = walkAmt * Math.abs(Math.sin(walkPhase)) * 0.025 - hideK * 0.06;
+  body.rotation.z = walkAmt * Math.sin(walkPhase) * 0.02;
+
+  // head retraction
+  hideK += ((hidden ? 1 : 0) - hideK) * Math.min(1, dt * 4);
+  if (headGroup) {
+    neck.position.z = 1.0 - hideK * 0.55;
+    neck.position.y = SHELL_Y - 0.04 - hideK * 0.08;
+    const look = walking ? 0 : Math.sin(t * 0.5) * 0.45;
+    headGroup.rotation.y = look * (1 - hideK);
+    headGroup.rotation.x = Math.sin(t * 0.8) * 0.06 + (walking ? Math.sin(walkPhase * 2) * 0.04 : 0);
+    // blink
+    if (t > nextBlink) { blinkT = 0; nextBlink = t + 2.5 + Math.random() * 3; }
+    let close = hideK;
+    if (blinkT >= 0) { blinkT += dt; close = Math.max(close, Math.sin(Math.min(1, blinkT / 0.22) * Math.PI)); if (blinkT > 0.22) blinkT = -1; }
+    lids.forEach(l => { l.scale.y = 0.02 + close * 0.98; });
+  }
+
+  if (walking) controls.target.lerp(new THREE.Vector3(tortoise.position.x, 0.45, tortoise.position.z), 0.05);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

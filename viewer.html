@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>模型檢視</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#1a140e;color:#f1e4c8;font-family:-apple-system,"PingFang TC","Noto Serif TC",serif;touch-action:none}
+#top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;background:linear-gradient(#1a140ee0,#1a140e00)}
+#top a{color:#e0b860;text-decoration:none;font-size:15px;border:1px solid #c9a24a66;border-radius:16px;padding:5px 12px}
+#top h1{margin:0;font-size:19px;letter-spacing:4px;flex:1}
+#info{font-size:12px;opacity:.7}
+#anims{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 14px);display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 10px}
+#anims button{border:1px solid #c9a24a77;background:#2a1e12e6;color:#f1e4c8;border-radius:18px;padding:8px 14px;font-size:14px;font-family:inherit}
+#anims button.on{background:#d9b04a;color:#1a1408}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;letter-spacing:3px;pointer-events:none}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body>
+<div id="top"><a href="index.html">‹ 模型庫</a><h1 id="ttl">模型</h1><a id="dl" download>下載 .glb</a></div>
+<div id="msg">載入中…</div>
+<div id="anims"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const key=new URLSearchParams(location.search).get('m')||'confucius';
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.shadowMap.enabled=true;document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x221a12);
+scene.environment=new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(),0.04).texture;scene.environmentIntensity=0.6;
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,0.01,500);
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.autoRotate=true;controls.autoRotateSpeed=0.8;
+controls.addEventListener('start',()=>controls.autoRotate=false);
+scene.add(new THREE.HemisphereLight(0xfff2e0,0x3a2a1a,1.0));const sun=new THREE.DirectionalLight(0xfff0d8,2.2);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+const floor=new THREE.Mesh(new THREE.CircleGeometry(1,64),new THREE.ShadowMaterial({opacity:0.35}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+let mixer=null,cur=null;
+fetch('models.json').then(r=>r.json()).then(list=>{const it=list.find(x=>x.k===key);if(it){document.getElementById('ttl').textContent=it.t;document.title=it.t+'・模型檢視';}}).catch(()=>{});
+document.getElementById('dl').href='models/'+key+'.glb';
+new GLTFLoader().load('models/'+key+'.glb',g=>{
+  document.getElementById('msg').remove();const m=g.scene;m.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});scene.add(m);
+  const b=new THREE.Box3().setFromObject(m),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3()),r=Math.max(s.x,s.y,s.z);
+  controls.target.copy(c);camera.position.set(c.x+r*0.9,c.y+r*0.45,c.z+r*1.6);camera.near=r/200;camera.far=r*40;camera.updateProjectionMatrix();
+  controls.minDistance=r*0.3;controls.maxDistance=r*6;floor.scale.setScalar(r*2.5);floor.position.y=b.min.y;
+  sun.position.set(c.x+r*2,c.y+r*4,c.z+r*2.5);sun.target.position.copy(c);scene.add(sun.target);Object.assign(sun.shadow.camera,{left:-r*1.5,right:r*1.5,top:r*1.5,bottom:-r*1.5,near:0.01,far:r*12});sun.shadow.camera.updateProjectionMatrix();
+  if(g.animations.length){mixer=new THREE.AnimationMixer(m);const box=document.getElementById('anims');
+    const play=(clip,btn)=>{if(cur)cur.fadeOut(0.3);cur=mixer.clipAction(clip).reset().fadeIn(0.3).play();[...box.children].forEach(x=>x.classList.toggle('on',x===btn));};
+    g.animations.forEach((clip,i)=>{const bt=document.createElement('button');bt.textContent=clip.name;bt.onclick=()=>play(clip,bt);box.appendChild(bt);if(clip.name==='Idle'||(i===0&&!g.animations.some(a=>a.name==='Idle')))play(clip,bt);});}
+},undefined,()=>{document.getElementById('msg').textContent='找不到模型：'+key;});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+const clock=new THREE.Clock();(function loop(){requestAnimationFrame(loop);const dt=clock.getDelta();if(mixer)mixer.update(dt);controls.update();renderer.render(scene,camera);})();
+</script></body></html>

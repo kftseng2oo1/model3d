@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>朱雀・南方神鳥</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a0a08;font-family:-apple-system,"PingFang TC","Noto Serif TC","Noto Sans TC",serif;-webkit-user-select:none;user-select:none;touch-action:none;color:#f3e2c0}
+  canvas{display:block}
+  #title{position:fixed;top:14px;left:16px;pointer-events:none}
+  #title h1{margin:0;font-size:22px;letter-spacing:6px;color:#ffcf6a;text-shadow:0 0 14px rgba(255,140,40,.55)}
+  #title p{margin:3px 0 0;font-size:12px;opacity:.7;letter-spacing:1px}
+  #meter{position:fixed;top:18px;right:16px;width:110px;pointer-events:none;font-size:11px;text-align:right;opacity:.85}
+  #meter .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.12);margin-top:4px;overflow:hidden}
+  #meter .fill{height:100%;width:0;background:linear-gradient(90deg,#e0402a,#ffd36a);transition:width .2s}
+  #ui{position:fixed;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
+  #ui button{border:1px solid rgba(255,200,110,.4);border-radius:22px;padding:9px 15px;font-size:15px;background:rgba(40,14,10,.82);color:#f3e2c0;-webkit-tap-highlight-color:transparent;cursor:pointer;font-family:inherit}
+  #ui button.on{background:#d9a845;color:#2a0f08}
+  #hint{position:fixed;left:50%;top:64px;transform:translateX(-50%);font-size:12px;opacity:.75;text-align:center;pointer-events:none;transition:opacity 1s;width:90vw}
+  #toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font-size:26px;letter-spacing:8px;color:#ffe09a;text-shadow:0 0 18px rgba(255,150,50,.8);opacity:0;transition:opacity .6s;pointer-events:none;white-space:nowrap}
+  #toast.small{font-size:13px;letter-spacing:1px;top:auto;bottom:80px;transform:translateX(-50%);background:rgba(40,14,10,.92);padding:8px 14px;border-radius:14px;text-shadow:none;white-space:normal;max-width:86vw;text-align:center}
+  #toast.show{opacity:1}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;letter-spacing:4px;color:#ffcf6a}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}
+</script>
+</head>
+<body>
+<div id="loading">神鳥浴火中…</div>
+<div id="title"><h1>朱雀</h1><p>南方神鳥・五行屬火</p></div>
+<div id="meter">親密度<div class="bar"><div class="fill" id="fill"></div></div></div>
+<div id="hint">點頭・點翅膀・點尾羽・點火焰台<br>按住在牠身上來回撫摸</div>
+<div id="toast"></div>
+<div id="ui">
+  <button id="bFly">飛翔</button>
+  <button id="bAwake">浴火重生</button>
+  <button id="bSpin">自動旋轉</button>
+  <button id="bExport">匯出 .glb</button>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { zipSync } from 'fflate';
+
+// ================= renderer / scene =================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a0a08);
+scene.fog = new THREE.Fog(0x1a0a08, 10, 24);
+const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 80);
+camera.position.set(2.2, 2.3, 6.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.35, 0);
+controls.enableDamping = true;
+controls.minDistance = 2.2; controls.maxDistance = 14;
+controls.maxPolarAngle = Math.PI * 0.49;
+
+scene.add(new THREE.HemisphereLight(0xffe2c0, 0x2a0e08, 0.8));
+const key = new THREE.DirectionalLight(0xfff0dc, 2.2);
+key.position.set(3, 7, 4); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -5, right: 5, top: 5, bottom: -5, near: 0.5, far: 25 });
+key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
+scene.add(key);
+const rimL = new THREE.DirectionalLight(0xffb070, 1.0); rimL.position.set(-4, 3, -3); scene.add(rimL);
+const fillL = new THREE.DirectionalLight(0xffe8d0, 0.5); fillL.position.set(0, 2, 6); scene.add(fillL);
+const fireLight = new THREE.PointLight(0xff7a20, 2.5, 7, 1.6); fireLight.position.set(0, 0.9, 0); scene.add(fireLight);
+
+// ================= helpers =================
+const rand = (() => { let s = 23; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mix = (a, b, t) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+function canvasTex(w, h, fn, color = true) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d'); fn(ctx, w, h);
+  const t = new THREE.CanvasTexture(c);
+  if (color) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  t.userData.mimeType = 'image/jpeg';
+  return t;
+}
+function pixelTex(w, h, fn, color = true) {
+  return canvasTex(w, h, (ctx) => { const img = ctx.createImageData(w, h); fn(img.data, w, h); ctx.putImageData(img, 0, 0); }, color);
+}
+function heightToNormal(hArr, w, h, strength) {
+  const at = (x, y) => hArr[((y + h) % h) * w + ((x + w) % w)];
+  return pixelTex(w, h, (d) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let nx = -(at(x + 1, y) - at(x - 1, y)) * strength, ny = -(at(x, y - 1) - at(x, y + 1)) * strength;
+      const l = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
+      d[i] = (nx / l * 0.5 + 0.5) * 255; d[i + 1] = (ny / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+  }, false);
+}
+
+// ================= environment =================
+const floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), new THREE.MeshStandardMaterial({ color: 0x4a1610, roughness: 0.7, metalness: 0.1 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const rug = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.5, 96), new THREE.MeshBasicMaterial({ color: 0xc8963a }));
+rug.rotation.x = -Math.PI / 2; rug.position.y = 0.005; scene.add(rug);
+const rug2 = rug.clone(); rug2.scale.setScalar(2.1); scene.add(rug2);
+
+function dotTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+}
+const DOT = dotTex();
+
+// ================= textures =================
+// feather: u across (0..1), v along length (0 base .. 1 tip); canvas top = tip
+const featherHW = (v) => 0.5 * Math.pow(Math.sin(Math.PI * Math.min(0.999, Math.max(0.001, v * 0.96 + 0.02))), 0.55) * smooth(0, 0.12, v);
+function featherTextures(orn) {
+  const W = 128, H = 512;
+  const outline = (g, k) => { g.beginPath(); for (let i = 0; i <= 60; i++) { const v = i / 60; g.lineTo(W / 2 + featherHW(v) * W * k, H - v * H); } for (let i = 60; i >= 0; i--) { const v = i / 60; g.lineTo(W / 2 - featherHW(v) * W * k, H - v * H); } };
+  const draw = (em) => (g) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    const gr = g.createLinearGradient(0, H, 0, 0);
+    if (em) { gr.addColorStop(0, '#000'); gr.addColorStop(0.55, '#200800'); gr.addColorStop(0.8, '#b04a08'); gr.addColorStop(1, '#ffd060'); }
+    else { gr.addColorStop(0, '#6a0810'); gr.addColorStop(0.3, '#c8241a'); gr.addColorStop(0.6, '#f0601c'); gr.addColorStop(0.85, '#ffb03a'); gr.addColorStop(1, '#fff0a0'); }
+    g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    if (!em) { g.strokeStyle = 'rgba(90,10,0,.3)'; g.lineWidth = 1.2; for (let y = 0; y < H; y += 6) { g.beginPath(); g.moveTo(W / 2, y); g.lineTo(0, y - 26); g.moveTo(W / 2, y); g.lineTo(W, y - 26); g.stroke(); } }
+    if (orn) {   // paisley "eye" ornament with a starry indigo heart
+      const cy = H * 0.5;
+      g.fillStyle = '#f6c856'; g.beginPath(); g.ellipse(W / 2, cy, W * 0.3, H * 0.13, 0, 0, TAU); g.fill();
+      g.fillStyle = em ? '#000' : '#2a1d6e'; g.beginPath(); g.ellipse(W / 2, cy, W * 0.22, H * 0.1, 0, 0, TAU); g.fill();
+      g.fillStyle = em ? '#806020' : '#ffe9a0';
+      for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(W / 2 + (rand() - 0.5) * W * 0.3, cy + (rand() - 0.5) * H * 0.15, 1.5 + rand() * 1.5, 0, TAU); g.fill(); }
+      g.fillStyle = '#f6c856'; g.beginPath(); g.arc(W / 2, cy + H * 0.02, W * 0.06, 0, TAU); g.fill();
+    }
+    g.strokeStyle = '#f6c856'; g.lineWidth = 6; outline(g, 0.98); g.stroke();
+    g.lineWidth = 3; g.beginPath(); g.moveTo(W / 2, H); g.lineTo(W / 2, H * 0.08); g.stroke();
+    // golden dots along the shaft
+    g.fillStyle = '#ffe08a'; for (let v = 0.2; v < 0.9; v += 0.11) { g.beginPath(); g.arc(W / 2 + W * 0.16, H - v * H, 2.5, 0, TAU); g.arc(W / 2 - W * 0.16, H - v * H - 20, 2.5, 0, TAU); g.fill(); }
+  };
+  return { map: canvasTex(W, H, draw(false)), emissive: canvasTex(W, H, draw(true)) };
+}
+function wispTexture() {   // soft flame tongue with alpha (PNG)
+  const W = 128, H = 256;
+  const t = canvasTex(W, H, (g) => {
+    g.clearRect(0, 0, W, H);
+    for (let k = 0; k < 3; k++) {
+      const gr = g.createRadialGradient(W / 2, H * 0.78, 4, W / 2, H * 0.6, H * 0.62);
+      gr.addColorStop(0, 'rgba(255,250,200,1)'); gr.addColorStop(0.25, 'rgba(255,200,80,.95)'); gr.addColorStop(0.55, 'rgba(255,110,30,.8)'); gr.addColorStop(0.85, 'rgba(220,40,10,.35)'); gr.addColorStop(1, 'rgba(180,20,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    }
+  });
+  t.userData.mimeType = 'image/png';
+  return t;
+}
+function breastTexture() {   // indigo starry heart with golden swirls
+  const S = 256;
+  const draw = (em) => (g) => {
+    g.fillStyle = em ? '#000' : '#1e1650'; g.fillRect(0, 0, S, S);
+    if (!em) { const gr = g.createRadialGradient(S / 2, S / 2, 4, S / 2, S / 2, S * 0.5); gr.addColorStop(0, '#7a5ad0'); gr.addColorStop(0.6, '#3a2a8a'); gr.addColorStop(1, '#a05a20'); g.fillStyle = gr; g.fillRect(0, 0, S, S); }
+    for (let i = 0; i < 70; i++) { g.fillStyle = em ? '#c0a060' : (rand() < 0.5 ? '#fff4c0' : '#ffd060'); g.beginPath(); g.arc(rand() * S, rand() * S, 0.6 + rand() * 2, 0, TAU); g.fill(); }
+    g.strokeStyle = '#f6c856'; g.lineWidth = 3;
+    for (let k = 0; k < 3; k++) { g.beginPath(); for (let a = 0; a < 5.5; a += 0.1) { const r = 8 + a * 9; g.lineTo(S / 2 + Math.cos(a + k * 2.1) * r, S / 2 + Math.sin(a + k * 2.1) * r * 1.2); } g.stroke(); }
+    g.lineWidth = 2; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(S / 2, S); g.quadraticCurveTo(S * (0.1 + k * 0.2), S * 0.5, S / 2 + (k - 2) * 20, 0); g.stroke(); }
+  };
+  return { map: canvasTex(S, S, draw(false)), emissive: canvasTex(S, S, draw(true)) };
+}
+function eyeTextures() {
+  const S = 256;
+  const draw = (em) => (g) => {
+    g.fillStyle = em ? '#000' : '#d0401a'; g.fillRect(0, 0, S, S);
+    const rings = em ? [[0.46, '#f2c45a'], [0.36, '#000'], [0.17, '#f2c45a'], [0.1, '#000']]
+                     : [[0.46, '#f2c45a'], [0.4, '#e8541e'], [0.33, '#9a0f14'], [0.22, '#14302c'], [0.17, '#f2c45a'], [0.1, '#3a0a10']];
+    for (const [r, c] of rings) { g.fillStyle = c; g.beginPath(); g.ellipse(S / 2, S * 0.58, r * S * 0.9, r * S * 1.15, 0, 0, TAU); g.fill(); }
+  };
+  return { map: canvasTex(S, S, draw(false)), emissive: canvasTex(S, S, draw(true)) };
+}
+function scaleField(S, G) {
+  const cell = S / G, pts = [];
+  for (let i = 0; i < G * G; i++) pts.push([0.15 + rand() * 0.7, 0.15 + rand() * 0.7, rand()]);
+  const edge = new Float32Array(S * S), tone = new Float32Array(S * S), dy = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
+    let d1 = 1e9, d2 = 1e9, id = 0, py = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const gx = cx + ox, gy = cy + oy, p = pts[((gy + G) % G) * G + ((gx + G) % G)];
+      const qy = (gy + p[1]) * cell, d = Math.hypot(x - (gx + p[0]) * cell, (y - qy) * 1.3);
+      if (d < d1) { d2 = d1; d1 = d; id = p[2]; py = (y - qy) / cell; } else if (d < d2) d2 = d;
+    }
+    edge[y * S + x] = Math.min(1, (d2 - d1) / (cell * 0.35)); tone[y * S + x] = id; dy[y * S + x] = py;
+  }
+  return { edge, tone, dy };
+}
+function plumageTextures() {   // overlapping small feathers for body/neck
+  const S = 512, { edge, tone, dy } = scaleField(S, 16);
+  const dark = [150, 22, 16], light = [244, 110, 34], line = [250, 200, 100];
+  const map = pixelTex(S, S, (d) => {
+    for (let i = 0; i < S * S; i++) {
+      const e = smooth(0, 0.3, edge[i]), t = tone[i] * 0.6 + smooth(-0.4, 0.4, dy[i]) * 0.4, n = rand() * 8;
+      for (let k = 0; k < 3; k++) d[i * 4 + k] = mix(line[k], mix(dark[k], light[k], t), e) + n;
+      d[i * 4 + 3] = 255;
+    }
+  });
+  const em = pixelTex(S, S, (d) => {
+    for (let i = 0; i < S * S; i++) { const g = 1 - smooth(0, 0.3, edge[i]); d[i * 4] = 242 * g; d[i * 4 + 1] = 190 * g; d[i * 4 + 2] = 90 * g; d[i * 4 + 3] = 255; }
+  });
+  const hgt = new Float32Array(S * S); for (let i = 0; i < S * S; i++) hgt[i] = Math.sqrt(edge[i]) * (0.6 + 0.4 * smooth(-0.5, 0.5, dy[i]));
+  const normal = heightToNormal(hgt, S, S, 2.0);
+  for (const t of [map, normal, em]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return { map, normal, emissive: em };
+}
+function bronzeTex() {
+  const S = 256;
+  return pixelTex(S, S, (d) => {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const n = (Math.sin(x * 0.2) * Math.sin(y * 0.13) + Math.sin((x - y) * 0.07)) * 0.2 + rand() * 0.2;
+      const band = (y % 64 < 4) ? 1 : 0, wave = Math.abs(((y % 64) - 32) - Math.sin(x / S * TAU * 4) * 10) < 2 ? 1 : 0;
+      const g = Math.max(band, wave), i = (y * S + x) * 4;
+      const base = [88 + n * 60, 52 + n * 40, 30 + n * 20];
+      if (rand() < 0.03) { base[0] = 60; base[1] = 110; base[2] = 90; }
+      d[i] = mix(base[0], 214, g); d[i + 1] = mix(base[1], 168, g); d[i + 2] = mix(base[2], 80, g); d[i + 3] = 255;
+    }
+  });
+}
+
+// ================= materials =================
+const FT = featherTextures(false), FTO = featherTextures(true), EYE = eyeTextures(), PL = plumageTextures(), WISP = wispTexture(), BR = breastTexture();
+const glowMats = [];
+function glowable(m, base) { m.userData.baseEmissive = base; glowMats.push(m); return m; }
+const featherMat = glowable(new THREE.MeshStandardMaterial({ name: 'feather', map: FT.map, emissiveMap: FT.emissive, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide }), 0.5);
+const featherOrnMat = glowable(new THREE.MeshStandardMaterial({ name: 'feather_orn', map: FTO.map, emissiveMap: FTO.emissive, emissive: 0xffffff, emissiveIntensity: 0.5, roughness: 0.45, metalness: 0.15, side: THREE.DoubleSide }), 0.5);
+const wispMat = glowable(new THREE.MeshStandardMaterial({ name: 'wisp', color: 0xffc080, map: WISP, emissiveMap: WISP, emissive: 0xff9a40, emissiveIntensity: 0.75, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 1, metalness: 0 }), 0.75);
+const breastMat = glowable(new THREE.MeshStandardMaterial({ name: 'breast', map: BR.map, emissiveMap: BR.emissive, emissive: 0xffffff, emissiveIntensity: 0.8, roughness: 0.3, metalness: 0.2 }), 0.8);
+const eyeFeatherMat = glowable(new THREE.MeshStandardMaterial({ name: 'tail_eye', map: EYE.map, emissiveMap: EYE.emissive, emissive: 0xffffff, emissiveIntensity: 0.6, roughness: 0.45, metalness: 0.15, side: THREE.DoubleSide }), 0.6);
+function plumageMat(rx, ry) {
+  const m = PL.map.clone(), n = PL.normal.clone(), e = PL.emissive.clone();
+  for (const t of [m, n, e]) { t.repeat.set(rx, ry); t.needsUpdate = true; }
+  const mat = glowable(new THREE.MeshStandardMaterial({ name: 'plumage', map: m, normalMap: n, emissiveMap: e, emissive: 0xffffff, emissiveIntensity: 0.4, roughness: 0.5, metalness: 0.1 }), 0.4);
+  mat.userData.tex = PL;
+  return mat;
+}
+const goldMat = new THREE.MeshStandardMaterial({ name: 'gold', color: 0xe0b04a, roughness: 0.28, metalness: 0.75, emissive: 0x3a2000, emissiveIntensity: 1 });
+const eyeMat = glowable(new THREE.MeshStandardMaterial({ name: 'zhuque_eye', color: 0xffd060, emissive: 0xffa020, emissiveIntensity: 0.8, roughness: 0.15 }), 0.8);
+const pupilMat = new THREE.MeshPhysicalMaterial({ name: 'pupil', color: 0x080404, roughness: 0.05, clearcoat: 1 });
+const plumeMats = [0x8e1014, 0xc8261a, 0xe8541e, 0xf08a2a].map((c, i) => glowable(new THREE.MeshStandardMaterial({ name: 'plume' + i, color: c, emissive: c, emissiveIntensity: 0.12, roughness: 0.5, metalness: 0.1 }), 0.12));
+const bronzeMap = bronzeTex(); bronzeMap.wrapS = bronzeMap.wrapT = THREE.RepeatWrapping;
+const bronzeMat = new THREE.MeshStandardMaterial({ name: 'bronze', map: bronzeMap, roughness: 0.45, metalness: 0.5 });
+const flameMats = [[0xc81808, 0.9, 0.7], [0xff6a10, 1.0, 0.8], [0xffc040, 1.2, 0.9]].map(([c, e, o], i) => new THREE.MeshStandardMaterial({ name: 'flame' + i, color: c, emissive: c, emissiveIntensity: e, transparent: true, opacity: o, depthWrite: false, side: THREE.DoubleSide }));
+
+// ================= geometry builders =================
+function featherGeo(len, wid, asym = 0) {
+  const sh = new THREE.Shape(), N = 24;
+  sh.moveTo(0, 0);
+  for (let i = 1; i <= N; i++) { const v = i / N; sh.lineTo(featherHW(v) * wid * (1 + asym), v * len); }
+  for (let i = N - 1; i >= 1; i--) { const v = i / N; sh.lineTo(-featherHW(v) * wid * (1 - asym), v * len); }
+  sh.lineTo(0, 0);
+  const g = new THREE.ShapeGeometry(sh, 2);
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / wid + 0.5, p.getY(i) / len);
+  // slight curvature (cupped feather)
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i) / wid, y = p.getY(i) / len; p.setZ(i, -x * x * wid * 0.35 + Math.sin(y * Math.PI) * len * 0.04); }
+  g.computeVertexNormals();
+  return g;
+}
+const featherGeoCache = new Map();
+function fGeo(len, wid) { const k = len.toFixed(2) + '_' + wid.toFixed(2); if (!featherGeoCache.has(k)) featherGeoCache.set(k, featherGeo(len, wid)); return featherGeoCache.get(k); }
+const backGeoCache = new Map();
+function fGeoBack(len, wid) { const k = len.toFixed(2) + '_' + wid.toFixed(2); if (!backGeoCache.has(k)) { const g = fGeo(len, wid).clone(); g.rotateX(-Math.PI / 2); backGeoCache.set(k, g); } return backGeoCache.get(k); }
+function addFeather(parent, x, y, z, len, wid, yaw, droop, mat = featherMat) {
+  const m = new THREE.Mesh(fGeoBack(len, wid), mat);   // length along -z, face up
+  m.position.set(x, y, z); m.rotation.order = 'YXZ'; m.rotation.set(droop, yaw, 0);
+  m.castShadow = true; parent.add(m); return m;
+}
+const wispGeoCache = new Map();
+function wispGeo(len, wid) {   // wavy flame tongue, length along -z
+  const k = len.toFixed(2) + '_' + wid.toFixed(2); if (wispGeoCache.has(k)) return wispGeoCache.get(k);
+  const sh = new THREE.Shape(), N = 20, hw = (v) => wid * 0.5 * Math.sin(Math.PI * Math.pow(Math.min(0.999, v), 0.6)) * Math.pow(1 - v, 0.25), wv = (v) => Math.sin(v * 7) * wid * 0.22 * v;
+  sh.moveTo(0, 0);
+  for (let i = 1; i <= N; i++) { const v = i / N; sh.lineTo(hw(v) + wv(v), v * len); }
+  for (let i = N - 1; i >= 1; i--) { const v = i / N; sh.lineTo(-hw(v) + wv(v), v * len); }
+  const g = new THREE.ShapeGeometry(sh, 2), p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / wid + 0.5, 0.15 + 0.85 * (p.getY(i) / len) * 0.95);
+  g.rotateX(-Math.PI / 2); wispGeoCache.set(k, g); return g;
+}
+function addWisp(parent, x, y, z, len, wid, yaw, pitch, roll = 0) {
+  const m = new THREE.Mesh(wispGeo(len, wid), wispMat); m.position.set(x, y, z); m.rotation.order = 'YXZ'; m.rotation.set(pitch, yaw, roll); m.renderOrder = 2; parent.add(m);
+  const m2 = m.clone(); m2.rotation.z = roll + Math.PI / 2; parent.add(m2);   // crossed planes read as volume
+  return m;
+}
+
+// ================= build the bird =================
+const root = new THREE.Group(); root.name = 'Zhuque'; scene.add(root);
+const BASE_TOP = 0.55;
+const parts = {};
+function tagPart(obj, part) { obj.traverse(o => { o.userData.part = part; }); }
+
+// --- flame altar ---
+const base = new THREE.Group(); base.name = 'Altar'; root.add(base);
+{
+  const a = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.78, 0.3, 48), bronzeMat); a.position.y = 0.15; a.castShadow = a.receiveShadow = true; base.add(a);
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.58, 0.2, 48), bronzeMat); b.position.y = 0.4; b.castShadow = true; base.add(b);
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.6, 0.06, 48), bronzeMat); c.position.y = 0.52; c.castShadow = c.receiveShadow = true; base.add(c);
+  for (const [r, y] of [[0.78, 0.01], [0.62, 0.3], [0.66, 0.55]]) { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.018, 8, 64), goldMat); t.rotation.x = Math.PI / 2; t.position.y = y; base.add(t); }
+}
+const FLAMES = [];
+function flameGeo(h, r) {
+  const pts = [];
+  for (let i = 0; i <= 16; i++) { const y = i / 16; pts.push(new THREE.Vector2(r * Math.sin(Math.PI * Math.pow(y, 0.42)) * (1 - 0.15 * y) + 0.0001, y * h)); }
+  const g = new THREE.LatheGeometry(pts, 16);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i) / h, tw = Math.sin(y * 4) * 0.4 * y; const x = p.getX(i), z = p.getZ(i); p.setX(i, x * Math.cos(tw) - z * Math.sin(tw) + Math.sin(y * 3.5) * r * 0.5 * y * y); p.setZ(i, x * Math.sin(tw) + z * Math.cos(tw)); }
+  g.computeVertexNormals(); return g;
+}
+for (let i = 0; i < 12; i++) {
+  const a = (i / 12) * TAU + 0.13, f = new THREE.Group(); f.name = 'Flame_' + String(i).padStart(2, '0');
+  const big = i % 2 === 0, h = big ? 0.5 : 0.36;
+  f.add(new THREE.Mesh(flameGeo(h, 0.13), flameMats[0]));
+  const mid = new THREE.Mesh(flameGeo(h * 0.72, 0.09), flameMats[1]); mid.position.y = 0.01; f.add(mid);
+  const core = new THREE.Mesh(flameGeo(h * 0.42, 0.055), flameMats[2]); core.position.y = 0.02; f.add(core);
+  f.position.set(Math.cos(a) * 0.5, BASE_TOP - 0.02, Math.sin(a) * 0.5);
+  f.userData = { phase: rand() * TAU, n: 5 + (i % 5) };
+  base.add(f); FLAMES.push(f);
+}
+tagPart(base, 'altar');
+
+// --- bird ---
+const bird = new THREE.Group(); bird.name = 'Bird'; root.add(bird);
+const body = new THREE.Group(); body.name = 'Body'; body.position.set(0, 1.3, 0); bird.add(body);
+{
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), plumageMat(3, 2));
+  torso.scale.set(0.27, 0.33, 0.5); torso.rotation.x = -0.65; torso.castShadow = true; body.add(torso);
+  const breast = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), plumageMat(2.5, 2));
+  breast.scale.set(0.25, 0.3, 0.27); breast.position.set(0, 0.13, 0.19); breast.castShadow = true; body.add(breast);
+  // starry indigo heart on the chest, framed in gold
+  const heart = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20, 0, TAU, 0, Math.PI * 0.32), breastMat);
+  heart.scale.set(0.13, 0.36, 0.12); heart.position.set(0, 0.12, 0.3); heart.rotation.x = Math.PI / 2 - 0.55; body.add(heart);
+  // layered breast/flank feathers
+  for (let r = 0; r < 3; r++) for (let i = 0; i < 7; i++) {
+    const a = (i - 3) * 0.32, y = 0.02 - r * 0.1, z = 0.2 - r * 0.05;
+    const f = addFeather(body, Math.sin(a) * 0.2, y, z + Math.cos(a) * 0.06, 0.26 + r * 0.04, 0.12, Math.PI + a * 0.6, -1.15 + r * 0.1, (i + r) % 3 ? featherMat : featherOrnMat);
+  }
+  // back/rump coverts
+  for (let i = 0; i < 11; i++) { const x = (i - 5) * 0.045; addFeather(body, x, 0.1 - Math.abs(x) * 0.3, -0.1, 0.48, 0.16, -x * 1.3, -0.5, i % 3 ? featherMat : featherOrnMat); }
+}
+tagPart(body, 'body');
+
+// legs with talons
+const LEGS = [];
+for (const s of [1, -1]) {
+  const leg = new THREE.Group(); leg.name = 'Leg_' + (s > 0 ? 'L' : 'R');
+  leg.position.set(s * 0.12, 1.06, 0.02); bird.add(leg);
+  const thigh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), plumageMat(1, 1)); thigh.scale.set(1, 1.5, 1.05); thigh.position.y = -0.04; leg.add(thigh);
+  for (let i = 0; i < 4; i++) addFeather(leg, s * 0.02 * (i - 1.5), -0.06, 0.03, 0.2, 0.09, Math.PI + (i - 1.5) * 0.3, -1.25);
+  const tars = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.42, 12), goldMat); tars.position.y = -0.27; leg.add(tars);
+  for (let k = 0; k < 4; k++) {
+    const a = k < 3 ? (k - 1) * 0.5 : Math.PI;
+    const toe = new THREE.Group(); toe.position.set(0, -0.47, 0); toe.rotation.y = a; leg.add(toe);
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.12, 8), goldMat); seg.rotation.x = Math.PI / 2; seg.position.set(0, 0, 0.06); toe.add(seg);
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.07, 8), goldMat); claw.position.set(0, -0.02, 0.13); claw.rotation.x = Math.PI / 2 + 0.9; toe.add(claw);
+  }
+  leg.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  tagPart(leg, 'body'); LEGS.push(leg);
+}
+
+// great flaming wings: Shoulder -> Fore -> Hand, built along +x*s
+const WINGS = [];
+for (const s of [1, -1]) {
+  const nm = 'Wing_' + (s > 0 ? 'L' : 'R');
+  const sh = new THREE.Group(); sh.name = nm; sh.position.set(s * 0.22, 1.52, 0.06); sh.rotation.order = 'YZX'; bird.add(sh);
+  const fore = new THREE.Group(); fore.name = nm + '_Fore'; fore.position.set(s * 0.5, 0, 0); fore.rotation.order = 'YZX'; sh.add(fore);
+  const hand = new THREE.Group(); hand.name = nm + '_Hand'; hand.position.set(s * 0.6, 0, 0); hand.rotation.order = 'YZX'; fore.add(hand);
+  const arm = (len, r) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), plumageMat(2, 1)); m.scale.set(len / 2 + 0.03, r, r * 1.3); m.position.x = s * len / 2; m.castShadow = true; return m; };
+  sh.add(arm(0.52, 0.085)); fore.add(arm(0.62, 0.065)); hand.add(arm(0.52, 0.05));
+  // upper arm: scapulars + lesser coverts
+  for (let i = 0; i < 8; i++) addFeather(sh, s * (0.03 + i * 0.06), 0.035, 0.03, 0.42 + i * 0.03, 0.17, s * 0.04, -0.12, i % 2 ? featherOrnMat : featherMat);
+  // forearm: secondaries, greater + lesser coverts
+  for (let i = 0; i < 11; i++) addFeather(fore, s * (0.0 + i * 0.058), -0.01 - i * 0.002, 0, 1.02 - i * 0.012, 0.24, s * (0.02 + i * 0.018), -0.14);
+  for (let i = 0; i < 10; i++) addFeather(fore, s * (0.02 + i * 0.062), 0.022, 0.02, 0.56, 0.2, s * (0.03 + i * 0.02), -0.08, i % 2 ? featherMat : featherOrnMat);
+  for (let i = 0; i < 9; i++) addFeather(fore, s * (0.03 + i * 0.066), 0.045, 0.04, 0.3, 0.15, s * (0.04 + i * 0.02), -0.04, featherOrnMat);
+  // hand: long primaries fanning out, tipped with flame tongues
+  const fire = new THREE.Group(); fire.name = nm + '_Fire'; hand.add(fire);
+  for (let i = 0; i < 12; i++) {
+    const len = 1.08 + i * 0.045, yaw = s * (0.16 + i * 0.1), x = s * (0.0 + i * 0.043);
+    addFeather(hand, x, -0.012 - i * 0.003, 0, len, 0.2, yaw, -0.1);
+    if (i % 2 === 1 || i === 11) addWisp(fire, x - Math.sin(yaw) * len * 0.9, -0.01, -Math.cos(yaw) * len * 0.9, 0.55 + i * 0.02, 0.2, yaw, 0.15);
+  }
+  for (let i = 0; i < 8; i++) addFeather(hand, s * (0.02 + i * 0.06), 0.025, 0.015, 0.42, 0.15, s * (0.22 + i * 0.1), -0.05, i % 2 ? featherMat : featherOrnMat);
+  // secondaries also lick flame at the trailing edge
+  for (let i = 0; i < 11; i += 2) addWisp(fire, -s * 0.6 + s * (i * 0.058) - 0, -0.01, -0.92, 0.42, 0.18, s * (0.02 + i * 0.018), 0.2);
+  tagPart(sh, 'wing');
+  WINGS.push({ s, sh, fore, hand });
+}
+
+// neck chain + hackles
+const NECK_N = 9, neckNodes = [];
+const neckGeo = new THREE.SphereGeometry(1, 20, 14);
+const neckMat = plumageMat(1.5, 1.5);
+for (let i = 0; i < NECK_N; i++) {
+  const n = new THREE.Group(); n.name = 'Neck_' + i;
+  const u = i / (NECK_N - 1), r = mix(0.12, 0.07, u);
+  const m = new THREE.Mesh(neckGeo, neckMat); m.scale.set(r, r, 0.13); m.castShadow = true; n.add(m);
+  if (i % 2 === 0 && i < 7) for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU; addFeather(n, Math.sin(a) * r * 0.8, Math.cos(a) * r * 0.8, 0.02, 0.16 + (1 - u) * 0.08, 0.08, a > Math.PI ? -0.5 : 0.5, 0, featherMat).rotation.set(Math.cos(a) * 0.9 - 0.2, Math.sin(a) * 0.9, 0); }
+  bird.add(n); neckNodes.push(n); tagPart(n, 'head');
+}
+
+// raptor head: hooked golden beak, fierce brow, flame crest
+const head = new THREE.Group(); head.name = 'Head'; bird.add(head);
+let beakLower, crest;
+function beakGeo(len, h, w, hook) {
+  const sh = new THREE.Shape();
+  sh.moveTo(0, h * 0.5);
+  sh.bezierCurveTo(len * 0.45, h * 0.55, len * 0.9, h * 0.2, len, -hook);
+  sh.bezierCurveTo(len * 0.96, -hook - h * 0.15, len * 0.85, -hook * 0.4, len * 0.7, -h * 0.25);
+  sh.lineTo(0, -h * 0.5); sh.lineTo(0, h * 0.5);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: true, bevelThickness: w * 0.25, bevelSize: w * 0.18, bevelSegments: 3, curveSegments: 12 });
+  g.translate(0, 0, -w / 2);
+  // taper the width toward the tip
+  const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const k = 1 - 0.75 * Math.min(1, p.getX(i) / len); p.setZ(i, p.getZ(i) * k); }
+  g.rotateY(-Math.PI / 2); g.computeVertexNormals(); return g;   // length along +z
+}
+{
+  const hm = plumageMat(1.5, 1.5);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.12, 32, 20), hm); skull.scale.set(0.8, 0.85, 1.12); skull.castShadow = true; head.add(skull);
+  const ub = new THREE.Mesh(beakGeo(0.2, 0.09, 0.07, 0.07), goldMat); ub.position.set(0, -0.005, 0.08); head.add(ub);
+  beakLower = new THREE.Group(); beakLower.name = 'Beak_Lower'; beakLower.position.set(0, -0.04, 0.09); head.add(beakLower);
+  const lb = new THREE.Mesh(beakGeo(0.13, 0.04, 0.05, 0.0), goldMat); lb.rotation.x = Math.PI; lb.position.set(0, -0.005, 0); beakLower.add(lb);
+  const tongue = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), new THREE.MeshStandardMaterial({ name: 'mouth', color: 0xc02030, roughness: 0.5 })); tongue.scale.set(0.8, 0.35, 1.6); tongue.position.set(0, 0.0, 0.05); beakLower.add(tongue);
+  for (const s of [1, -1]) {
+    const e = new THREE.Group(); e.position.set(s * 0.068, 0.025, 0.055); e.rotation.y = s * 0.75; head.add(e);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.024, 16, 12), eyeMat); e.add(ball);
+    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.013, 12, 8), pupilMat); pu.scale.set(0.7, 1, 1); pu.position.z = 0.016; e.add(pu);
+    // fierce golden brow ridge
+    const brow = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), goldMat); brow.scale.set(0.055, 0.016, 0.03); brow.position.set(s * 0.06, 0.06, 0.06); brow.rotation.set(0.2, s * 0.6, s * -0.35); head.add(brow);
+    // cheek feathers sweeping back
+    for (let k = 0; k < 3; k++) addFeather(head, s * 0.07, -0.02 + k * 0.03, 0.0, 0.16 + k * 0.03, 0.07, Math.PI - s * 0.25 + Math.PI, -0.2 + k * 0.15, k === 1 ? featherOrnMat : featherMat).rotation.y = s * 0.35;
+  }
+  // flame crest streaming back
+  crest = new THREE.Group(); crest.name = 'Crest'; crest.position.set(0, 0.08, -0.02); head.add(crest);
+  for (let i = 0; i < 7; i++) {
+    const a = (i - 3) * 0.17, len = 0.42 + (3 - Math.abs(i - 3)) * 0.07;
+    addWisp(crest, Math.sin(a) * 0.03, 0, 0, len, 0.13, a * 0.8, 0.55 + Math.abs(i - 3) * 0.08);
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = (i - 1) * 0.25;
+    const pl = new THREE.Group(); pl.rotation.order = 'YXZ'; pl.rotation.set(0.7, a, 0); crest.add(pl);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.009, 0.36, 6), goldMat); shaft.rotation.x = -Math.PI / 2; shaft.position.z = -0.18; pl.add(shaft);
+    const tip = new THREE.Mesh(fGeoBack(0.12, 0.08), eyeFeatherMat); tip.position.z = -0.32; pl.add(tip);
+  }
+}
+tagPart(head, 'head');
+
+// tail: 7 long fiery plumes, each a chain of feather pairs ending in an eye feather and a flame tongue
+const TAIL_K = 7, TAIL_N = 14, TAIL_L = 2.6, TAIL0 = new THREE.Vector3(0, 1.12, -0.42);
+const tail = [];
+const eyeGeo = (() => { const g = fGeo(0.4, 0.28).clone(); g.rotateX(Math.PI / 2); return g; })();   // length along +z
+for (let k = 0; k < TAIL_K; k++) {
+  const chain = [];
+  for (let i = 0; i < TAIL_N; i++) {
+    const s = i / (TAIL_N - 1), n = new THREE.Group(); n.name = 'Tail_' + k + '_' + String(i).padStart(2, '0');
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, TAIL_L / TAIL_N * 1.05, 6), goldMat); sh.rotation.x = Math.PI / 2; n.add(sh);
+    const vl = 0.2 + 0.22 * smooth(0.0, 0.6, s) - 0.08 * smooth(0.85, 1, s), vw = 0.1 + 0.05 * smooth(0, 0.6, s);
+    const m = (i + k) % 3 === 0 ? featherOrnMat : featherMat;
+    for (const sd of [1, -1]) { const f = new THREE.Mesh(fGeoBack(vl, vw), m); f.rotation.order = 'YXZ'; f.rotation.set(0, Math.PI + sd * 0.5, sd * 0.3); f.position.z = -0.06; n.add(f); }
+    bird.add(n); chain.push(n);
+  }
+  const eye = new THREE.Group(); eye.name = 'Tail_' + k + '_Eye';
+  const em = new THREE.Mesh(eyeGeo, eyeFeatherMat); em.position.z = -0.06; em.castShadow = true; eye.add(em);
+  const fire = new THREE.Group(); fire.name = 'Tail_' + k + '_Fire'; fire.position.z = 0.3; eye.add(fire);
+  addWisp(fire, 0, 0, 0, 0.55, 0.22, Math.PI, 0);
+  bird.add(eye);
+  tail.push({ chain, eye });
+  chain.forEach(n => tagPart(n, 'tail')); tagPart(eye, 'tail');
+}
+
+// ================= pose engine =================
+const _q = new THREE.Quaternion(), _e = new THREE.Euler(), _m = new THREE.Matrix4();
+const quatE = (x, y, z, o = 'XYZ') => new THREE.Quaternion().setFromEuler(_e.set(x, y, z, o));
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const REST = { t: 0, look: 0, nod: 0, cry: 0, beak: 0, crest: 0, spread: 0.8, flapPh: 0, flapAmt: 0, display: 0, fly: -1, flame: 0, breath: 0, awake: 0 };
+
+function framer() {
+  let refUp = V(0, 1, 0);
+  return (from, to) => {
+    const dir = to.clone().sub(from).normalize();
+    refUp.addScaledVector(dir, -refUp.dot(dir));
+    if (refUp.lengthSq() < 1e-6) refUp.set(0, 1, 0).addScaledVector(dir, -dir.y);
+    refUp.normalize();
+    _m.lookAt(to, from, refUp);
+    return new THREE.Quaternion().setFromRotationMatrix(_m);
+  };
+}
+function flyPath(p) {   // returns {pos, yaw, bank, lift}
+  const H = 1.7, R = 2.3;
+  const circ = (th) => V(R * Math.sin(th), H + 0.25 * Math.sin(th * 2), R * Math.cos(th));
+  let pos;
+  if (p < 0.15) pos = V(0, 0, 0).lerp(circ(0), smooth(0, 0.15, p));
+  else if (p < 0.85) pos = circ(((p - 0.15) / 0.7) * TAU);
+  else pos = circ(TAU).lerp(V(0, 0, 0), smooth(0.85, 1, p));
+  return pos;
+}
+function computePose(st) {
+  const out = [];
+  const T = st.t;
+  // --- flight transform of the whole bird ---
+  let birdPos = V(0, 0, 0), birdQ = new THREE.Quaternion(), flyK = 0, glideK = 0;
+  if (st.fly >= 0) {
+    const p = st.fly, e = 0.004;
+    birdPos = flyPath(p);
+    const a = flyPath(Math.max(0, p - e)), b = flyPath(Math.min(1, p + e));
+    const d = b.sub(a); let yaw = Math.atan2(d.x, d.z);
+    flyK = smooth(0, 0.08, p) * (1 - smooth(0.92, 1, p));
+    const circleK = smooth(0.12, 0.2, p) * (1 - smooth(0.8, 0.88, p));
+    glideK = circleK;
+    if (Math.hypot(d.x, d.z) < 1e-5) yaw = 0;
+    yaw *= smooth(0.0, 0.12, p) * (1 - smooth(0.9, 1, p));
+    birdQ = quatE(-0.15 * flyK, yaw, -0.35 * circleK, 'YXZ');
+  }
+  out.push(['Bird', { p: birdPos, q: birdQ }]);
+  // --- body breathing / awake rise ---
+  const br = Math.sin(TAU * T / 3) * 0.015 * (1 - flyK);
+  out.push(['Body', { p: V(0, 1.3 + br + st.awake * 0.05, 0), q: quatE(-0.05 * st.cry - 0.08 * st.awake + 0.25 * flyK, 0, 0), s: V(1 + br, 1 + br, 1 + br) }]);
+  for (const l of LEGS) out.push([l.name, { q: quatE(1.1 * flyK, 0, 0) }]);
+  // --- wings ---
+  const spread = Math.min(1, st.spread + flyK * 0.5 + st.awake * 0.5);
+  const fa = Math.min(1.2, st.flapAmt + flyK * (1 - 0.72 * glideK));
+  for (const w of WINGS) {
+    const s = w.s, ph = st.flapPh;
+    // standing: wings raised in a V, face forward; flying: wings level and fully stretched, mostly gliding
+    const lift = mix(mix(0.1, 1.1, spread), 0.12, flyK) + fa * (0.7 - 0.1 * flyK) * Math.sin(ph) + Math.sin(TAU * T / 3) * 0.04 * (1 - fa);
+    const twist = mix(mix(0.3, 1.2, spread), -0.08, flyK) + fa * 0.3 * Math.sin(ph + 1.2);
+    out.push([w.sh.name, { q: quatE(-twist, s * mix(0.55, 0.05, spread), s * lift, 'YZX') }]);
+    const up = Math.max(0, Math.sin(ph + Math.PI));   // fold a little only on the upstroke
+    out.push([w.fore.name, { q: quatE(0, s * (mix(mix(0.75, 0.05, spread), -0.12, flyK) + fa * 0.25 * up), s * fa * 0.22 * Math.sin(ph - 0.6), 'YZX') }]);
+    out.push([w.hand.name, { q: quatE(0, s * (mix(mix(0.4, -0.05, spread), -0.32, flyK) + fa * 0.2 * up), s * fa * 0.4 * Math.sin(ph - 1.1), 'YZX') }]);
+  }
+  // --- neck & head ---
+  const look = st.look * (1 - flyK), up = st.cry + st.awake * 0.6;
+  const P0 = V(0, 1.5, 0.28);
+  const ctrl = [P0, V(0, 1.78 + up * 0.08, 0.44 - up * 0.04 + flyK * 0.2), V(0, 2.02 + up * 0.15, 0.36 - up * 0.08 + flyK * 0.35), V(0, 2.18 + up * 0.22 - flyK * 0.3 + st.nod * 0.05, 0.5 - up * 0.1 + flyK * 0.6)];
+  const curve = new THREE.CatmullRomCurve3(ctrl);
+  const yawQ = quatE(0, look, 0);
+  const pts = [];
+  for (let i = 0; i <= NECK_N; i++) { const u = i / NECK_N, p = curve.getPoint(u).sub(P0).applyQuaternion(quatE(0, look * u, 0)).add(P0); pts.push(p); }
+  const fr = framer();
+  for (let i = 0; i < NECK_N; i++) out.push([neckNodes[i].name, { p: pts[i], q: fr(pts[i], pts[i + 1]) }]);
+  const hq = yawQ.clone().multiply(quatE(-0.15 - up * 0.75 + st.nod + flyK * 0.25, 0, 0));
+  out.push(['Head', { p: pts[NECK_N], q: hq }]);
+  out.push(['Beak_Lower', { q: quatE(st.beak * 0.55, 0, 0) }]);
+  // --- tail ---
+  const disp = st.display + st.awake * 0.6;
+  for (let k = 0; k < TAIL_K; k++) {
+    const kc = k - (TAIL_K - 1) / 2;
+    const yaw = kc * mix(0.12, 0.36, Math.min(1, disp)) * (1 - flyK * 0.6);
+    const c = Math.cos(yaw), sn = Math.sin(yaw);
+    const back = V(-sn, 0, -c), side = V(c, 0, -sn);
+    const L = TAIL_L * mix(1, 0.85, Math.min(1, disp));
+    const P = [];
+    for (let i = 0; i <= TAIL_N; i++) {
+      const s = i / TAIL_N;
+      const yRest = -0.95 * Math.pow(s, 1.6), hRest = s * L * 0.94;
+      const el = 1.2 - Math.abs(kc) * 0.1;
+      const yDisp = Math.sin(el) * s * L - 0.25 * s * s, hDisp = Math.cos(el) * s * L + 0.25 * s * s;
+      const yFly = -0.12 * s - 0.08 * s * s, hFly = s * L;
+      const dk = Math.min(1, disp) * (1 - flyK);
+      let y = mix(mix(yRest, yDisp, dk), yFly, flyK), h = mix(mix(hRest, hDisp, dk), hFly, flyK);
+      const sw = (0.07 * (1 - dk * 0.7) + 0.05 * flyK) * s * Math.sin(TAU * (0.8 * s - T / 3) + k * 1.3);
+      const vw = (0.025 + 0.06 * flyK) * s * Math.sin(TAU * (1.1 * s - T / 1.5 * (1 + flyK)) + k);
+      P.push(TAIL0.clone().addScaledVector(back, h).addScaledVector(side, sw).add(V(0, y + vw, 0)));
+    }
+    const f = framer();
+    for (let i = 0; i < TAIL_N; i++) out.push([tail[k].chain[i].name, { p: P[i].clone().lerp(P[i + 1], 0.5), q: f(P[i], P[i + 1]) }]);
+    const eq = f(P[TAIL_N - 1], P[TAIL_N]);
+    out.push([tail[k].eye.name, { p: P[TAIL_N], q: eq.multiply(quatE(0, 0, 0)), s: V(1 + disp * 0.3, 1, 1 + disp * 0.3) }]);
+  }
+  // --- flames ---
+  // flame tongues flicker on wings, crest and tail
+  const fl = (ph, n) => 1 + 0.18 * Math.sin(TAU * n * T / 6 + ph) + st.awake * 0.35 + st.flame * 0.15;
+  for (const w of WINGS) out.push([w.sh.name + '_Fire', { s: V(1, 1 + 0.08 * Math.sin(TAU * 7 * T / 6 + w.s), 1 + (fl(w.s, 5) - 1) * 0.35 + fa * 0.08) }]);
+  out.push(['Crest', { q: quatE(-st.crest * 0.6 + flyK * 0.3, 0, 0), s: V(1, 1, fl(0.5, 8) + st.crest * 0.25) }]);
+  for (let k = 0; k < TAIL_K; k++) out.push(['Tail_' + k + '_Fire', { s: V(1, 1, fl(k * 1.7, 4 + (k % 3))) }]);
+  for (const f of FLAMES) {
+    const { phase, n } = f.userData;
+    const h = 1 + 0.22 * Math.sin(TAU * n * T / 6 + phase) + 0.1 * Math.sin(TAU * (n + 3) * T / 6 + phase * 2) + st.flame * 1.6;
+    out.push([f.name, { s: V(1 + st.flame * 0.3, h, 1 + st.flame * 0.3) }]);
+  }
+  return out;
+}
+function nodeMapOf(r) { const m = {}; r.traverse(o => { if (o.name) m[o.name] = o; }); return m; }
+function applyPose(map, st) { for (const [n, tr] of computePose(st)) { const o = map[n]; if (!o) continue; if (tr.p) o.position.copy(tr.p); if (tr.q) o.quaternion.copy(tr.q); if (tr.s) o.scale.copy(tr.s); } }
+const live = nodeMapOf(root);
+applyPose(live, REST);
+document.getElementById('loading').remove();
+
+// ================= effects =================
+const SPARK_N = 500, sparkGeo = new THREE.BufferGeometry();
+const sparkPos = new Float32Array(SPARK_N * 3), sparkCol = new Float32Array(SPARK_N * 3);
+const sparks = Array.from({ length: SPARK_N }, () => ({ life: 0, max: 1, v: new THREE.Vector3(), c: [1, 1, 1], g: 0 }));
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkCol, 3));
+scene.add(new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.08, map: DOT, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+let sparkIdx = 0;
+function spark(p, v, c, life = 1.2, g = -0.4) { const i = sparkIdx, s = sparks[i]; sparkIdx = (sparkIdx + 1) % SPARK_N; s.life = s.max = life; s.v.copy(v); s.c = c; s.g = g; sparkPos.set([p.x, p.y, p.z], i * 3); }
+const GOLD = [1, 0.8, 0.35], EMBER = [1, 0.4, 0.1], RED = [1, 0.2, 0.1];
+const rings = []; const ringGeo = new THREE.RingGeometry(0.92, 1, 64);
+function ring(color) { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.scale.setScalar(0.6); scene.add(m); rings.push({ m, t: 0 }); }
+
+// sound — 徵調 (G pentatonic: G A B D E)
+let actx = null;
+function audio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+function tone(f, dur, vol, type = 'sine', delay = 0, glideTo = 0) {
+  const a = audio(); if (!a) return; const t0 = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t0); if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t0 + dur * 0.6);
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function noise(dur, vol, type, freq, q = 1, delay = 0) {
+  const a = audio(); if (!a) return; const len = Math.floor(a.sampleRate * dur), b = a.createBuffer(1, len, a.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / len);
+  const s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(); s.buffer = b; f.type = type; f.frequency.value = freq; f.Q.value = q; g.gain.value = vol;
+  s.connect(f).connect(g).connect(a.destination); s.start(a.currentTime + delay);
+}
+function phoenixCry() { tone(784, 1.1, 0.12, 'triangle', 0, 1175); tone(1175, 0.9, 0.08, 'sine', 0.35, 988); tone(988, 1.2, 0.07, 'sine', 0.75, 1568); tone(392, 1.6, 0.05, 'sine', 0); }
+function wingWhoosh(n = 3) { for (let i = 0; i < n; i++) noise(0.32, 0.5, 'lowpass', 700, 0.7, i * 0.42); }
+function chimes() { [784, 880, 988, 1175, 1319, 1568].forEach((f, i) => tone(f, 1.8, 0.06, 'sine', i * 0.09)); }
+function fireRoar() { noise(1.6, 0.6, 'lowpass', 260, 0.8); for (let i = 0; i < 10; i++) noise(0.03, 0.4, 'highpass', 3000, 1, 0.1 + Math.random() * 1.2); tone(98, 1.8, 0.12); }
+function zhiChord() { [196, 294, 392, 440, 587, 784].forEach((f, i) => tone(f, 3, 0.07, i % 2 ? 'triangle' : 'sine', i * 0.12)); }
+
+// ================= live state & interaction =================
+const S = Object.assign({}, REST);
+const acts = [];   // {k, t, dur, fn}
+function act(k, dur, fn, end) { if (acts.some(a => a.k === k)) return false; acts.push({ k, t: 0, dur, fn, end }); return true; }
+const busy = () => acts.some(a => a.k === 'fly' || a.k === 'awake');
+let glow = 0, affection = 0, happyT = 0, petStroke = 0;
+const fill = document.getElementById('fill'), hintEl = document.getElementById('hint'), toastEl = document.getElementById('toast');
+function toast(msg, small = false) { toastEl.textContent = msg; toastEl.classList.toggle('small', small); toastEl.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => toastEl.classList.remove('show'), small ? 3200 : 2800); }
+
+const pulse = (k, a, b) => Math.sin(Math.PI * smooth(a, b, k)) ;
+function onHead() { if (act('cry', 1.8, (k, st) => { const e = Math.sin(Math.PI * Math.min(1, k / 0.9)); st.cry = e; st.beak = e * (0.6 + 0.4 * Math.sin(k * 40)); st.crest = e; })) { phoenixCry(); glow = Math.max(glow, 1.2); } }
+function onWing() { if (act('flap', 1.6, (k, st) => { st.flapAmt = Math.sin(Math.PI * k) * 1.0; st.flapPh = k * TAU * 3; st.spread = mix(REST.spread, 1, Math.sin(Math.PI * k)); })) { wingWhoosh(3); for (let i = 0; i < 40; i++) setTimeout(() => spark(V((rand() - 0.5) * 3, 1.4 + rand() * 0.8, (rand() - 0.5) * 1.2), V((rand() - 0.5) * 0.6, -0.2 + rand() * 0.4, (rand() - 0.5) * 0.6), rand() < 0.5 ? GOLD : RED, 1.6, -0.3), i * 25); } }
+function onTail() { if (act('display', 3.2, (k, st) => { st.display = smooth(0, 0.25, k) * (1 - smooth(0.75, 1, k)); })) { chimes(); glow = Math.max(glow, 1.5); for (let i = 0; i < 50; i++) setTimeout(() => spark(V((rand() - 0.5) * 2.4, 1.4 + rand() * 1.6, -0.8 - rand() * 1.2), V(0, 0.15, 0), GOLD, 1.2, 0), 300 + i * 30); } }
+function onAltar() { if (act('flame', 1.6, (k, st) => { st.flame = Math.sin(Math.PI * Math.min(1, k / 0.8)) * (1 - smooth(0.6, 1, k) * 0.0); })) { fireRoar(); ring(0xff7a20); setTimeout(() => ring(0xffd36a), 250); for (let i = 0; i < 70; i++) { const a = rand() * TAU, r = 0.3 + rand() * 0.3; spark(V(Math.cos(a) * r, 0.7, Math.sin(a) * r), V((rand() - 0.5) * 0.4, 1.2 + rand() * 1.4, (rand() - 0.5) * 0.4), rand() < 0.6 ? EMBER : GOLD, 1.8, -0.1); } } }
+function fly() { if (busy()) return; act('fly', 6.5, (k, st) => { st.fly = k; st.flapPh += 0; }); wingWhoosh(6); }
+function awaken() {
+  if (busy()) return; affection = 0; zhiChord(); fireRoar(); toast('朱雀護佑・南方離火');
+  for (let k = 0; k < 6; k++) setTimeout(() => ring(k % 2 ? 0xffd36a : 0xff5a20), k * 220);
+  act('awake', 3.0, (k, st) => { const e = Math.sin(Math.PI * Math.min(1, k / 0.85)); st.awake = e; st.flame = e; st.cry = e * 0.6; st.beak = e * 0.5; st.crest = e; st.flapAmt = e * 0.6; st.flapPh = k * TAU * 2.5; }, () => { act('fly', 6.5, (k, st) => { st.fly = k; }); wingWhoosh(6); });
+}
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function hit(e) { ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const h = ray.intersectObject(root, true)[0]; return h ? { part: h.object.userData.part, point: h.point } : null; }
+let down = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { audio(); const h = hit(e); if (h) { controls.enabled = false; down = { lx: e.clientX, ly: e.clientY, part: h.part, point: h.point, moved: 0 }; } });
+addEventListener('pointermove', (e) => {
+  if (!down) return; const d = Math.hypot(e.clientX - down.lx, e.clientY - down.ly); down.lx = e.clientX; down.ly = e.clientY; down.moved += d;
+  if (down.moved > 10) { const h = hit(e); if (h) {
+    affection = Math.min(1, affection + d / 2600); happyT = 0.6; glow = Math.max(glow, 0.8); petStroke += d;
+    if (rand() < 0.5) spark(h.point, V((rand() - 0.5) * 0.3, 0.3 + rand() * 0.4, (rand() - 0.5) * 0.3), rand() < 0.5 ? GOLD : EMBER, 1, -0.2);
+    if (petStroke > 380) { petStroke = 0; tone([784, 880, 988, 1175, 1319][Math.floor(rand() * 5)], 0.6, 0.05); }
+    if (affection >= 1) awaken(); } }
+});
+addEventListener('pointerup', () => {
+  if (down && down.moved < 10 && !busy()) {
+    hintEl.style.opacity = 0;
+    ({ head: onHead, wing: onWing, tail: onTail, altar: onAltar, body: onWing }[down.part] || onWing)();
+    affection = Math.min(1, affection + 0.06); if (affection >= 1) awaken();
+  }
+  down = null; controls.enabled = true;
+});
+document.getElementById('bFly').onclick = () => { audio(); fly(); };
+document.getElementById('bAwake').onclick = () => { audio(); awaken(); };
+const bSpin = document.getElementById('bSpin');
+bSpin.onclick = () => { controls.autoRotate = !controls.autoRotate; controls.autoRotateSpeed = 1.0; bSpin.classList.toggle('on', controls.autoRotate); };
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ================= GLB clips & export =================
+function buildClips() {
+  const FPS = 12;
+  function bake(name, dur, stFn) {
+    const n = Math.round(dur * FPS), tracks = {};
+    for (let i = 0; i <= n; i++) {
+      const t = i / FPS, st = Object.assign({}, REST, { t }, stFn(t, t / dur));
+      for (const [node, tr] of computePose(st)) for (const key of ['p', 'q', 's']) if (tr[key]) {
+        const id = node + key; (tracks[id] ||= { node, key, times: [], vals: [] });
+        tracks[id].times.push(t); tracks[id].vals.push(...tr[key].toArray());
+      }
+    }
+    const out = [];
+    for (const tr of Object.values(tracks)) {
+      const w = tr.key === 'q' ? 4 : 3, v = tr.vals; let varies = false;
+      for (let i = w; i < v.length && !varies; i++) if (Math.abs(v[i] - v[i % w]) > 1e-4) varies = true;
+      if (!varies) continue;
+      out.push(tr.key === 'q' ? new THREE.QuaternionKeyframeTrack(tr.node + '.quaternion', tr.times, v) : new THREE.VectorKeyframeTrack(tr.node + (tr.key === 'p' ? '.position' : '.scale'), tr.times, v));
+    }
+    return new THREE.AnimationClip(name, dur, out);
+  }
+  return [
+    bake('Idle', 6, (t, k) => ({ look: Math.sin(k * TAU) * 0.35, nod: Math.sin(k * TAU * 2) * 0.05 })),
+    bake('Cry', 1.8, (t, k) => { const e = Math.sin(Math.PI * Math.min(1, k / 0.9)); return { cry: e, beak: e * (0.6 + 0.4 * Math.sin(k * 40)), crest: e }; }),
+    bake('Flap', 1.6, (t, k) => ({ flapAmt: Math.sin(Math.PI * k), flapPh: k * TAU * 3, spread: mix(REST.spread, 1, Math.sin(Math.PI * k)) })),
+    bake('Display', 3.2, (t, k) => ({ display: smooth(0, 0.25, k) * (1 - smooth(0.75, 1, k)) })),
+    bake('Flame', 1.6, (t, k) => ({ flame: Math.sin(Math.PI * Math.min(1, k / 0.8)) })),
+    bake('Fly', 6.5, (t, k) => ({ fly: k, flapPh: t * TAU * 1.85 })),
+    bake('Awaken', 3, (t, k) => { const e = Math.sin(Math.PI * Math.min(1, k / 0.85)); return { awake: e, flame: e, cry: e * 0.6, beak: e * 0.5, crest: e, flapAmt: e * 0.6, flapPh: k * TAU * 2.5 }; }),
+  ];
+}
+function buildExportScene() {
+  const clone = root.clone(true);
+  applyPose(nodeMapOf(clone), REST);
+  const geoCache = new Map(), matCache = new Map();
+  clone.traverse(o => {
+    if (!o.isMesh) return; const m0 = o.material;
+    if (m0.userData.tex) {
+      const rep = m0.map.repeat, k = o.geometry.uuid + rep.x + 'x' + rep.y;
+      if (!geoCache.has(k)) { const g = o.geometry.clone(), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * rep.x, uv.getY(i) * rep.y); geoCache.set(k, g); }
+      o.geometry = geoCache.get(k);
+      if (!matCache.has('plumage')) { const m = m0.clone(); m.map = PL.map; m.normalMap = PL.normal; m.emissiveMap = PL.emissive; m.emissiveIntensity = 0.4; m.name = 'plumage'; matCache.set('plumage', m); }
+      o.material = matCache.get('plumage');
+    } else if (m0.userData.baseEmissive !== undefined) {
+      if (!matCache.has(m0.uuid)) { const m = m0.clone(); m.emissiveIntensity = m0.userData.baseEmissive; matCache.set(m0.uuid, m); }
+      o.material = matCache.get(m0.uuid);
+    }
+  });
+  const s = new THREE.Scene(); s.add(clone); return s;
+}
+function exportGLB() { return new Promise((res, rej) => new GLTFExporter().parse(buildExportScene(), res, rej, { binary: true, maxTextureSize: 1024, animations: buildClips() })); }
+window.__exportGLB = async () => { const u = new Uint8Array(await exportGLB()); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); };
+window.__tap = (p) => ({ head: onHead, wing: onWing, tail: onTail, altar: onAltar })[p]();
+window.__awaken = awaken; window.__dbg = () => JSON.stringify({acts: acts.map(a=>[a.k,a.t.toFixed(2)]), flame: S.flame, sc: live.Flame_00.scale.y.toFixed(2)}); window.__fly = fly;
+let dl = null;
+try { if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {}); } catch (e) {}
+document.getElementById('bExport').onclick = async () => {
+  toast('正在產生模型…', true);
+  try {
+    const buf = await exportGLB();
+    if (dl) {
+      const zip = zipSync({ 'zhuque.glb': [new Uint8Array(buf), { level: 0 }] });
+      try { await dl.save({ filename: 'zhuque-glb.zip', data: zip }); toast('已下載 zhuque-glb.zip，解壓後即是 zhuque.glb', true); }
+      catch (e) { toast(e && e.code === 'declined' ? '已取消下載' : '這裡無法下載：' + (e && e.code || ''), true); }
+    } else if (window.claude) toast('此預覽畫面不支援下載', true);
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' })); a.download = 'zhuque.glb'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('已下載 zhuque.glb', true); }
+  } catch (e) { toast('匯出失敗：' + e.message, true); }
+};
+
+// ================= loop =================
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  Object.assign(S, REST, { t });
+  S.look = Math.sin(t * 0.5) * 0.35; S.nod = Math.sin(t * 0.9) * 0.05;
+  for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; a.t += dt; const k = Math.min(1, a.t / a.dur); a.fn(k, S); if (k >= 1) { acts.splice(i, 1); if (a.end) a.end(); } }
+  if (S.fly >= 0) S.flapPh = t * TAU * 1.85;
+  if (happyT > 0) { S.crest = Math.max(S.crest, 0.5); S.nod += 0.08; happyT -= dt; }
+  applyPose(live, S);
+  // glow + fire
+  glow = Math.max(0, glow - dt * 1.3);
+  const g = glow + S.awake * 3 + S.flame * 0.8;
+  for (const m of glowMats) m.emissiveIntensity = m.userData.baseEmissive * (1 + Math.min(g, 2.5) * (m === wispMat ? 0.35 : 0.9));
+  fireLight.intensity = 2.5 + Math.sin(t * 13) * 0.3 + Math.sin(t * 7.3) * 0.3 + S.flame * 6 + S.awake * 4;
+  if (rand() < 0.25 + S.flame) { const a = rand() * TAU, r = 0.45 * rand(); spark(V(Math.cos(a) * r, 0.75, Math.sin(a) * r), V((rand() - 0.5) * 0.2, 0.6 + rand() * 0.8, (rand() - 0.5) * 0.2), EMBER, 1.4, 0); }
+  if (S.awake > 0.3 && rand() < 0.8) { const bp = live.Bird.position; spark(V(bp.x + (rand() - 0.5) * 2.6, bp.y + 1 + rand() * 1.2, bp.z + (rand() - 0.5) * 1.6), V(0, 0.8, 0), rand() < 0.5 ? GOLD : EMBER, 1.2, 0); }
+  if (S.fly > 0.05 && S.fly < 0.95 && rand() < 0.9) { const w = live.Bird.localToWorld(V(0, 1.2, -0.6)); spark(w, V((rand() - 0.5) * 0.2, -0.1, (rand() - 0.5) * 0.2), rand() < 0.5 ? GOLD : EMBER, 1.5, -0.1); }
+  affection = Math.max(0, affection - dt * 0.01); fill.style.width = (affection * 100).toFixed(1) + '%';
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.t += dt; r.m.scale.setScalar(0.6 + r.t * 2.4); r.m.material.opacity = Math.max(0, 0.8 * (1 - r.t / 1.6)); if (r.t > 1.6) { scene.remove(r.m); r.m.material.dispose(); rings.splice(i, 1); } }
+  for (let i = 0; i < SPARK_N; i++) { const s = sparks[i]; if (s.life > 0) { s.life -= dt; s.v.y += s.g * dt; sparkPos[i * 3] += s.v.x * dt; sparkPos[i * 3 + 1] += s.v.y * dt; sparkPos[i * 3 + 2] += s.v.z * dt; const f = Math.max(0, s.life / s.max); sparkCol[i * 3] = s.c[0] * f; sparkCol[i * 3 + 1] = s.c[1] * f; sparkCol[i * 3 + 2] = s.c[2] * f; } else sparkCol[i * 3] = sparkCol[i * 3 + 1] = sparkCol[i * 3 + 2] = 0; }
+  sparkGeo.attributes.position.needsUpdate = sparkGeo.attributes.color.needsUpdate = true;
+  controls.update(); renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

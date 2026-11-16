@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>model3d・3D 模型庫</title>
+<style>
+body{margin:0;background:#17110b;color:#f1e4c8;font-family:-apple-system,"PingFang TC","Noto Serif TC",serif}
+header{padding:28px 18px 8px;max-width:1080px;margin:0 auto}
+h1{margin:0;font-size:26px;letter-spacing:6px;color:#f2d48a}
+header p{margin:8px 0 0;font-size:14px;line-height:1.7;opacity:.8}
+nav{max-width:1080px;margin:14px auto 0;padding:0 18px;display:flex;gap:8px;flex-wrap:wrap}
+nav button{border:1px solid #c9a24a66;background:none;color:#e0b860;border-radius:16px;padding:6px 14px;font-size:14px;font-family:inherit}
+nav button.on{background:#d9b04a;color:#1a1408}
+main{max-width:1080px;margin:16px auto 40px;padding:0 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.c{background:#231a10;border:1px solid #c9a24a44;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.c .v{height:200px;background:radial-gradient(#3a2c1c,#1d150d);position:relative}
+.c .v model-viewer{width:100%;height:100%;--poster-color:transparent}
+.c .b{padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:6px}
+.c h2{margin:0;font-size:18px;letter-spacing:3px;color:#f2d48a;display:flex;align-items:baseline;gap:8px}
+.c h2 small{font-size:11px;letter-spacing:1px;color:#c9a24a;border:1px solid #c9a24a55;border-radius:8px;padding:1px 6px}
+.c p{margin:0;font-size:13px;line-height:1.6;opacity:.85;flex:1}
+.c .m{font-size:11px;opacity:.6}
+.c .a{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.c .a a{font-size:13px;color:#1a1408;background:#d9b04a;border-radius:14px;padding:5px 11px;text-decoration:none}
+.c .a a.o{background:none;color:#e0b860;border:1px solid #c9a24a77}
+footer{text-align:center;font-size:12px;opacity:.55;padding:0 0 30px}
+</style>
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head><body>
+<header><h1>3D 模型庫</h1><p>尼山聖境・大學堂 3D 導覽所用的原創模型。全部為 glTF 2.0（.glb），可下載後放進 three.js、Blender、Unity 等軟體。<br>卡片上可直接拖曳旋轉；「檢視」看大圖與動畫，「互動版」是原本的製作頁。</p></header>
+<nav id="tabs"></nav>
+<main id="grid"></main>
+<footer>kftseng2oo1/model3d</footer>
+<script>
+fetch('models.json').then(function(r){return r.json();}).then(function(list){
+  var groups=['全部'];list.forEach(function(x){if(groups.indexOf(x.g)<0)groups.push(x.g);});
+  var tabs=document.getElementById('tabs'),grid=document.getElementById('grid'),cur='全部';
+  function draw(){grid.innerHTML='';list.forEach(function(x){if(cur!=='全部'&&x.g!==cur)return;
+    var d=document.createElement('div');d.className='c';
+    d.innerHTML='<div class="v"><model-viewer src="models/'+x.k+'.glb" camera-controls auto-rotate loading="lazy" interaction-prompt="none" shadow-intensity="0.6" exposure="1"'+(x.anims.length?' autoplay animation-name="'+(x.anims.indexOf('Idle')>=0?'Idle':x.anims[0])+'"':'')+'></model-viewer></div>'+
+      '<div class="b"><h2>'+x.t+'<small>'+x.g+'</small></h2><p>'+x.d+'</p><div class="m">'+x.size+' MB'+(x.anims.length?'・動畫 '+x.anims.join(' / '):'')+'</div>'+
+      '<div class="a"><a href="viewer.html?m='+x.k+'">檢視</a><a class="o" href="'+x.p+'">互動版</a><a class="o" href="models/'+x.k+'.glb" download>下載 .glb</a></div></div>';
+    grid.appendChild(d);});}
+  groups.forEach(function(g){var b=document.createElement('button');b.textContent=g;if(g===cur)b.className='on';b.onclick=function(){cur=g;[].forEach.call(tabs.children,function(t){t.className=t===b?'on':'';});draw();};tabs.appendChild(b);});
+  draw();});
+</script></body></html>

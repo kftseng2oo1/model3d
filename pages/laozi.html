@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>老子・道德真人</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#17120c;font-family:-apple-system,"PingFang TC","Noto Serif TC","Noto Sans TC",serif;-webkit-user-select:none;user-select:none;touch-action:none;color:#f1e6cc}
+  canvas{display:block}
+  #title{position:fixed;top:14px;left:16px;pointer-events:none}
+  #title h1{margin:0;font-size:22px;letter-spacing:6px;color:#f6ecd2;text-shadow:0 0 14px rgba(240,200,120,.5)}
+  #title p{margin:3px 0 0;font-size:12px;opacity:.7;letter-spacing:1px}
+  #modes{position:fixed;top:16px;right:12px;display:flex;gap:6px}
+  #modes button,#ui button{border:1px solid rgba(230,200,140,.45);border-radius:22px;padding:9px 15px;font-size:15px;background:rgba(30,22,14,.85);color:#f1e6cc;-webkit-tap-highlight-color:transparent;cursor:pointer;font-family:inherit}
+  #modes button{padding:6px 11px;font-size:13px}
+  #modes button.on,#ui button.on{background:#d9b04a;color:#1a1408}
+  #ui{position:fixed;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px}
+  #hint{position:fixed;left:50%;top:70px;transform:translateX(-50%);font-size:12px;opacity:.75;text-align:center;pointer-events:none;transition:opacity 1s;width:90vw}
+  #quote{position:fixed;left:50%;bottom:130px;transform:translateX(-50%);max-width:86vw;font-size:18px;letter-spacing:3px;line-height:1.6;text-align:center;color:#fff3d6;text-shadow:0 0 12px rgba(0,0,0,.9),0 0 18px rgba(230,180,90,.6);opacity:0;transition:opacity .8s;pointer-events:none}
+  #quote small{display:block;font-size:12px;letter-spacing:2px;opacity:.75;margin-top:4px}
+  #quote.show{opacity:1}
+  #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;letter-spacing:4px;color:#f6ecd2}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","fflate":"https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js"}}
+</script>
+</head>
+<body>
+<div id="loading">老子騎牛而來…</div>
+<div id="title"><h1>老子</h1><p>白眉長髯、布衣藜杖、杖掛葫蘆</p></div>
+<div id="modes"><button data-m="painted" class="on">彩繪</button><button data-m="bronze">青銅</button></div>
+<div id="hint">點頭部：頷首・點左手：論道・點身體：拱手回禮</div>
+<div id="quote"></div>
+<div id="ui">
+  <button id="bBow">回禮</button>
+  <button id="bTeach">論道</button>
+  <button id="bAwake" style="display:none"></button>
+  <button id="bSpin">自動旋轉</button>
+  <button id="bExport">匯出 .glb</button>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { zipSync } from 'fflate';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1d1710); scene.fog = new THREE.Fog(0x1d1710, 9, 22);
+const pm = new THREE.PMREMGenerator(renderer); const envTex = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 0.05, 60); camera.position.set(1.3, 1.75, 3.6);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 1.25, 0); controls.enableDamping = true; controls.minDistance = 1.2; controls.maxDistance = 9; controls.maxPolarAngle = Math.PI * 0.52;
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x2a2014, 0.9));
+const key = new THREE.DirectionalLight(0xfff2dc, 2.4); key.position.set(2.5, 5, 3.5); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.camera.left = key.shadow.camera.bottom = -2; key.shadow.camera.right = key.shadow.camera.top = 2.5; scene.add(key);
+const rimL = new THREE.DirectionalLight(0xbfd4ff, 1.0); rimL.position.set(-3, 3, -3); scene.add(rimL);
+const fillL = new THREE.DirectionalLight(0xffe2c0, 0.45); fillL.position.set(-1, 1.5, 4); scene.add(fillL);
+const glowLight = new THREE.PointLight(0xffd070, 0, 5, 1.6); glowLight.position.set(0, 1.8, 0.6); scene.add(glowLight);
+
+const rand = (() => { let s = 31; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const TAU = Math.PI * 2, V = (x, y, z) => new THREE.Vector3(x, y, z);
+function canvasTex(w, h, fn, color = true, mime = 'image/jpeg') { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); if (color) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.userData.mimeType = mime; return t; }
+
+// ===== stage (not exported) =====
+const stage = new THREE.Group(); scene.add(stage);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(20, 64), new THREE.MeshStandardMaterial({ color: 0x2c2418, roughness: 0.85 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; stage.add(floor);
+const dais = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.82, 0.08, 48), new THREE.MeshStandardMaterial({ color: 0x5a4a36, roughness: 0.7 })); dais.position.y = -0.04; dais.receiveShadow = true; stage.add(dais);
+stage.position.y = 0;
+
+// ===== textures (neutral, tinted by material colour so palettes can swap) =====
+const robeTex = canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#ececec'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 40; i++) { const x = rand() * w, ww = 6 + rand() * 18, gr = g.createLinearGradient(x - ww, 0, x + ww, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, 'rgba(60,50,40,' + (0.08 + rand() * 0.12) + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - ww, 0, ww * 2, h); }
+  g.strokeStyle = 'rgba(120,110,100,.12)'; g.lineWidth = 1.5;   // faint woven cloud medallions
+  for (let i = 0; i < 26; i++) { const x = rand() * w, y = rand() * h; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(x + k * 7, y, 5 + k * 2, Math.PI, TAU); g.stroke(); } } });
+const trimTex = canvasTex(256, 64, (g, w, h) => { g.fillStyle = '#b8b8b8'; g.fillRect(0, 0, w, h); g.fillStyle = '#ffffff'; g.fillRect(0, 4, w, 3); g.fillRect(0, h - 7, w, 3); });
+const trimEm = canvasTex(256, 64, (g, w, h) => { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.strokeStyle = '#fff'; g.fillStyle = '#fff'; g.fillRect(0, 4, w, 3); g.fillRect(0, h - 7, w, 3); g.lineWidth = 3;
+  for (let x = 0; x < w; x += 32) { g.beginPath(); g.moveTo(x + 4, 50); g.lineTo(x + 4, 14); g.lineTo(x + 26, 14); g.lineTo(x + 26, 42); g.lineTo(x + 12, 42); g.lineTo(x + 12, 24); g.lineTo(x + 19, 24); g.lineTo(x + 19, 34); g.stroke(); } });
+const sashTex = canvasTex(64, 256, (g, w, h) => { g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(255,255,255,.9)'; g.fillRect(4, 0, 3, h); g.fillRect(w - 7, 0, 3, h);
+  g.strokeStyle = 'rgba(255,230,160,.9)'; g.lineWidth = 2; for (let y = 16; y < h; y += 34) { g.beginPath(); g.moveTo(w / 2, y); g.lineTo(w / 2 + 12, y + 10); g.lineTo(w / 2, y + 20); g.lineTo(w / 2 - 12, y + 10); g.closePath(); g.stroke(); } });
+const slipTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#d9b878'; g.fillRect(0, 0, w, h); const n = 10, sw = w / n;
+  for (let i = 0; i < n; i++) { const v = (rand() - 0.5) * 30; g.fillStyle = `rgb(${215 + v},${180 + v},${115 + v})`; g.fillRect(i * sw + 1, 0, sw - 2, h); g.fillStyle = 'rgba(90,60,20,.6)'; g.fillRect(i * sw, 0, 1.5, h); }
+  g.fillStyle = 'rgba(90,50,20,.75)'; g.fillRect(0, h * 0.18, w, 3); g.fillRect(0, h * 0.8, w, 3);
+  g.fillStyle = '#2a1a10'; g.font = 'bold 20px "Noto Serif TC","PingFang TC",serif'; g.textAlign = 'center'; const txt = '學而時習之不亦說乎有朋自遠方來不亦樂乎人不知而不慍不亦君子乎';
+  let k = 0; for (let i = n - 1; i >= 0; i--) for (let j = 0; j < 7 && k < txt.length; j++) g.fillText(txt[k++], i * sw + sw / 2, 62 + j * 24); });
+const haloTex = canvasTex(512, 512, (g, w, h) => { g.clearRect(0, 0, w, h); const c = w / 2;
+  let gr = g.createRadialGradient(c, c, 60, c, c, 250); gr.addColorStop(0, 'rgba(255,220,140,.0)'); gr.addColorStop(0.6, 'rgba(255,214,120,.22)'); gr.addColorStop(1, 'rgba(255,200,90,.35)'); g.fillStyle = gr; g.beginPath(); g.arc(c, c, 246, 0, TAU); g.fill();
+  const ringG = (r, lw) => { const lg = g.createLinearGradient(0, 0, w, h); lg.addColorStop(0, '#fff0b0'); lg.addColorStop(0.5, '#e0a838'); lg.addColorStop(1, '#ffe08a'); g.strokeStyle = lg; g.lineWidth = lw; g.beginPath(); g.arc(c, c, r, 0, TAU); g.stroke(); };
+  ringG(240, 14); ringG(206, 6);
+  g.strokeStyle = '#f2c460'; g.lineWidth = 4; for (let a = 0; a < 48; a++) { const t = a / 48 * TAU; g.save(); g.translate(c + Math.cos(t) * 223, c + Math.sin(t) * 223); g.rotate(t); g.beginPath(); g.moveTo(-7, 6); g.lineTo(-7, -6); g.lineTo(6, -6); g.lineTo(6, 3); g.lineTo(-1, 3); g.stroke(); g.restore(); }
+  g.fillStyle = '#ffe7a0'; g.shadowColor = 'rgba(255,190,60,.9)'; g.shadowBlur = 14; g.font = 'bold 96px "Noto Serif TC","PingFang TC",serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('仁', c, 112); }, true, 'image/png');
+
+// ===== materials (named; the tour swaps palettes by name) =====
+const glowMats = [];
+function M(name, o) { const m = new THREE.MeshStandardMaterial(Object.assign({ name, roughness: 0.75, metalness: 0 }, o)); m.envMap = envTex; m.envMapIntensity = 0.5; return m; }
+const MAT = {
+  robe: M('robe', { map: robeTex, side: THREE.DoubleSide }),
+  inner: M('inner', {}),
+  trim: M('trim', { map: trimTex, emissiveMap: trimEm, emissive: 0xffffff, emissiveIntensity: 0.6 }),
+  sash: M('sash', { map: sashTex, side: THREE.DoubleSide }),
+  skin: M('skin', { roughness: 0.6 }),
+  beard: M('beard', { roughness: 0.9 }),
+  hat: M('hat', { roughness: 0.35 }),
+  gold: M('gold', { roughness: 0.3, metalness: 0.6 }),
+  eye: M('eye_ink', { roughness: 0.3 }),
+  scroll: M('scroll', { map: slipTex, roughness: 0.6 }),
+  jade: M('jade', { roughness: 0.15 }),
+  halo: new THREE.MeshStandardMaterial({ name: 'halo', map: haloTex, emissiveMap: haloTex, emissive: 0xffffff, emissiveIntensity: 1.2, transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 1 }),
+};
+// palette: [colour, emissive colour]
+const PAL = {
+  painted: { robe: [0x9c9484], inner: [0xe8e2d4], trim: [0x4e3e2c, 0x2a1c10], sash: [0x5a4632], skin: [0xe0b994], beard: [0xf2efe8], hat: [0x6a4a2a], gold: [0xc89a48], eye_ink: [0x1a1410], scroll: [0xffffff], jade: [0xc89a48] },
+  bronze: { robe: [0x86643c], inner: [0x8e6c44], trim: [0x664a2a, 0x3a2a12], sash: [0x6e5030], skin: [0xa07c50], beard: [0x5e4428], hat: [0x5e4428], gold: [0xb08848], eye_ink: [0x3a2a18], scroll: [0xa88a5c], jade: [0x5a7a58] },
+  awake: { robe: [0x2c3a7c], inner: [0xf2eadc], trim: [0xe2b44a, 0xffd88a], sash: [0xb03228], skin: [0xf0c8a2], beard: [0x1e2442], hat: [0x1e2442], gold: [0xffd060], eye_ink: [0x101020], scroll: [0xffffff], jade: [0x40d0a0] },
+};
+const _ca = new THREE.Color(), _cb = new THREE.Color();
+function setPalette(a, b = a, k = 0) {   // blend palette a -> b
+  for (const m of Object.values(MAT)) { const pa = PAL[a][m.name], pb = PAL[b][m.name]; if (!pa) continue;
+    m.color.copy(_ca.setHex(pa[0]).lerp(_cb.setHex(pb[0]), k)); if (pa[1] !== undefined) m.emissive.copy(_ca.setHex(pa[1]).lerp(_cb.setHex(pb[1]), k));
+    const bz = (a === 'bronze' ? 1 - k : 0) + (b === 'bronze' ? k : 0); m.metalness = m.name === 'gold' ? 0.6 : bz * 0.55; m.roughness = m.name === 'gold' ? 0.3 : 0.75 - bz * 0.35; m.envMapIntensity = 0.5 + bz * 0.9; }
+}
+setPalette('painted');
+
+// ===== geometry helpers =====
+const sphere = new THREE.SphereGeometry(1, 32, 22);
+function blob(parent, mat, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) { const m = new THREE.Mesh(sphere, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz); m.castShadow = true; parent.add(m); return m; }
+function lathe(pts, segs, mat, sx = 1, sz = 1, fold = 0, uRep = 1) { const g = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), segs), P = g.attributes.position, U = g.attributes.uv; const y0 = pts[0][1], y1 = pts[pts.length - 1][1];
+  for (let i = 0; i < P.count; i++) { let x = P.getX(i), y = P.getY(i), z = P.getZ(i); const a = Math.atan2(x, z), lo = Math.max(0, 1 - (y - y0) / (y1 - y0 || 1));
+    const k = 1 + fold * lo * (Math.sin(a * 9 + 0.5) * 0.6 + Math.sin(a * 17 + 1.3) * 0.4); P.setXYZ(i, x * sx * k, y, z * sz * k); U.setX(i, U.getX(i) * uRep); }
+  g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; return m; }
+function ribbon(pts, width, mat, normals, vScale = 1) {   // flat band along a polyline, facing outward
+  const pos = [], uv = [], idx = []; let len = 0;
+  for (let i = 0; i < pts.length; i++) { const p = pts[i], t = (pts[Math.min(i + 1, pts.length - 1)].clone().sub(pts[Math.max(i - 1, 0)])).normalize(), n = normals[i], s = new THREE.Vector3().crossVectors(t, n).normalize().multiplyScalar(width / 2);
+    if (i) len += p.distanceTo(pts[i - 1]); const q = p.clone().addScaledVector(n, 0.006); pos.push(q.x - s.x, q.y - s.y, q.z - s.z, q.x + s.x, q.y + s.y, q.z + s.z); uv.push(len / width * vScale * 0.25, 0, len / width * vScale * 0.25, 1);
+    if (i) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); m.castShadow = true; return m; }
+function strand(parent, mat, a, mid, b, r0, r1, flat = 0.6, segs = 10) {   // tapered curved tube (beard, moustache)
+  const c = new THREE.QuadraticBezierCurve3(a, mid, b), g = new THREE.TubeGeometry(c, segs, 1, 10, false), P = g.attributes.position;
+  for (let i = 0; i <= segs; i++) { const cp = c.getPoint(i / segs), r = r0 + (r1 - r0) * Math.pow(i / segs, 0.8); for (let j = 0; j <= 10; j++) { const k = i * 11 + j, v = V(P.getX(k), P.getY(k), P.getZ(k)).sub(cp); v.z *= flat; v.multiplyScalar(r).add(cp); P.setXYZ(k, v.x, v.y, v.z); } }
+  g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); m.castShadow = true; parent.add(m); return m; }
+const G = (name, parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.name = name; g.position.set(x, y, z); parent.add(g); return g; };
+function tagPart(o, part) { o.traverse(c => { c.userData.part = part; }); }
+
+// ===== body =====
+const root = G('Laozi', scene);
+const body = G('Body', root);
+// lower robe (skirt) with vertical folds, hem trim, front overlap trim
+const SK = [[0.36, 0.06], [0.345, 0.2], [0.31, 0.4], [0.27, 0.6], [0.235, 0.8], [0.205, 0.95], [0.195, 1.02], [0.17, 1.05]];
+body.add(lathe(SK, 56, MAT.robe, 1, 0.84, 0.045, 3));
+body.add(lathe([[0.364, 0.0], [0.368, 0.03], [0.358, 0.075]], 56, MAT.trim, 1, 0.84, 0.045, 14));
+const skR = (y) => { for (let i = 1; i < SK.length; i++) if (y <= SK[i][1]) { const a = SK[i - 1], b = SK[i], t = (y - a[1]) / (b[1] - a[1]); return a[0] + (b[0] - a[0]) * t; } return SK[SK.length - 1][0]; };
+function onSkirt(theta, y, out = 0) { const r = skR(y) + out; return V(Math.sin(theta) * r, y, Math.cos(theta) * r * 0.84); }
+{ const pts = [], nrm = []; for (let i = 0; i <= 12; i++) { const y = 0.98 - i * 0.075, th = -0.62 - i * 0.012; pts.push(onSkirt(th, y, 0.012)); nrm.push(V(Math.sin(th), 0, Math.cos(th))); }
+  body.add(ribbon(pts, 0.05, MAT.trim, nrm)); }
+// belt + hanging sash (紳) + jade pendant
+body.add(lathe([[0.205, 0.955], [0.212, 0.99], [0.205, 1.03]], 48, MAT.trim, 1.02, 0.86, 0, 10));
+for (const s of [-1, 1]) { const pts = [], nrm = []; for (let i = 0; i <= 8; i++) { const y = 0.96 - i * 0.06, th = s * 0.09; pts.push(onSkirt(th, y, 0.022 + i * 0.002)); nrm.push(V(Math.sin(th), 0.1, Math.cos(th)).normalize()); }
+  body.add(ribbon(pts, 0.055, MAT.sash, nrm, 0.5)); }
+{ const k = blob(body, MAT.sash, 0, 0.975, 0.19, 0.045, 0.03, 0.02); const j = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.011, 8, 20), MAT.jade); j.position.copy(onSkirt(0, 0.43, 0.03)); body.add(j);
+  blob(body, MAT.gold, 0, 0.48, j.position.z - 0.004, 0.008, 0.02, 0.008); }
+// shoes (cloud-toe slippers)
+for (const s of [-1, 1]) { blob(body, MAT.hat, s * 0.09, 0.03, 0.26, 0.05, 0.03, 0.07); blob(body, MAT.trim, s * 0.09, 0.055, 0.32, 0.03, 0.025, 0.02, -0.4); }
+
+// torso (bends at the waist)
+const torso = G('Torso', body, 0, 1.0, 0);
+const TP = [[0.195, 0.0], [0.205, 0.12], [0.215, 0.26], [0.22, 0.36], [0.212, 0.42], [0.17, 0.47], [0.1, 0.51], [0.058, 0.535]];
+const TSX = 1.12, TSZ = 0.76;
+torso.add(lathe(TP, 48, MAT.robe, TSX, TSZ, 0, 3));
+const tR = (y) => { for (let i = 1; i < TP.length; i++) if (y <= TP[i][1]) { const a = TP[i - 1], b = TP[i], t = (y - a[1]) / (b[1] - a[1]); return a[0] + (b[0] - a[0]) * t; } return TP[TP.length - 1][0]; };
+function onTorso(th, y, out = 0) { const r = tR(y) + out; return V(Math.sin(th) * r * TSX, y, Math.cos(th) * r * TSZ); }
+function collar(th0, y0, th1, y1, w, mat, n = 14, out = 0) { const pts = [], nrm = []; for (let i = 0; i <= n; i++) { const t = i / n, th = th0 + (th1 - th0) * t, y = y0 + (y1 - y0) * t; pts.push(onTorso(th, y, out)); nrm.push(V(Math.sin(th) / TSX, 0.25, Math.cos(th) / TSZ).normalize()); } torso.add(ribbon(pts, w, mat, nrm)); }
+// 交領右衽: white inner collar, then the navy outer collar crossing from the wearer's left shoulder to the right waist
+collar(-0.55, 0.515, 0.12, 0.33, 0.04, MAT.inner, 14, 0.004);
+collar(0.62, 0.52, -0.2, 0.36, 0.035, MAT.inner, 14, 0.008);
+collar(0.75, 0.5, -0.95, 0.03, 0.06, MAT.trim, 22, 0.014);
+collar(-0.75, 0.5, -0.05, 0.3, 0.06, MAT.trim, 12, 0.006);
+{ const pts = [], nrm = []; for (let i = 0; i <= 16; i++) { const th = 0.75 + i / 16 * (TAU - 1.5); pts.push(onTorso(th, 0.505, 0.014)); nrm.push(V(Math.sin(th), 0.4, Math.cos(th)).normalize()); } torso.add(ribbon(pts, 0.06, MAT.trim, nrm)); }
+
+// neck / head
+const neck = G('Neck', torso, 0, 0.52, 0);
+{ const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.058, 0.1, 18), MAT.skin); m.position.y = 0.04; neck.add(m); }
+const head = G('Head', neck, 0, 0.07, 0.005); head.scale.setScalar(1.12);
+blob(head, MAT.skin, 0, 0.085, 0.0, 0.09, 0.118, 0.1);
+blob(head, MAT.skin, 0, 0.035, 0.03, 0.075, 0.06, 0.075);   // jaw / cheeks
+// hair cap (top and back), bun, small crown with gold hairpin
+{ const cap = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, TAU, 0, Math.PI * 0.42), MAT.beard); cap.scale.set(0.096, 0.11, 0.106); cap.position.set(0, 0.09, -0.03); cap.rotation.x = -0.85; head.add(cap);
+  const back = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, TAU, 0, Math.PI * 0.5), MAT.beard); back.scale.set(0.094, 0.11, 0.1); back.position.set(0, 0.08, -0.012); back.rotation.x = -1.6; head.add(back); }
+blob(head, MAT.beard, 0, 0.195, -0.045, 0.042, 0.038, 0.042);
+{ const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.004, 0.14, 8), MAT.hat); pin.rotation.z = Math.PI / 2 + 0.25; pin.position.set(0, 0.205, -0.045); head.add(pin); }
+for (const s of [-1, 1]) { blob(head, MAT.skin, s * 0.09, 0.07, -0.005, 0.017, 0.042, 0.026, 0, 0, s * 0.1);   // long ears
+  blob(head, MAT.eye, s * 0.034, 0.093, 0.091, 0.018, 0.0045, 0.006, 0, 0, -s * 0.12);   // gentle narrowed eyes
+  strand(head, MAT.beard, V(s * 0.012, 0.114, 0.095), V(s * 0.07, 0.122, 0.09), V(s * 0.1, 0.06, 0.07), 0.009, 0.003, 0.7, 10);   // long white brows drooping past the eyes
+  strand(head, MAT.beard, V(s * 0.006, 0.047, 0.1), V(s * 0.04, 0.045, 0.1), V(s * 0.05, 0.005, 0.082), 0.007, 0.002, 0.7, 8);   // moustache
+  strand(head, MAT.beard, V(s * 0.082, 0.07, 0.01), V(s * 0.088, -0.02, 0.04), V(s * 0.05, -0.24, 0.07), 0.02, 0.004, 0.6, 12); }  // side locks
+blob(head, MAT.skin, 0, 0.074, 0.1, 0.015, 0.03, 0.02, -0.25);
+blob(head, MAT.skin, 0, 0.056, 0.108, 0.018, 0.012, 0.013);
+const beard = G('Beard', head, 0, 0.022, 0.07);
+strand(beard, MAT.beard, V(0, 0, 0), V(0, -0.24, 0.06), V(0, -0.5, 0.03), 0.05, 0.006, 0.5, 16);
+strand(beard, MAT.beard, V(0.02, 0, 0), V(0.035, -0.18, 0.05), V(0.02, -0.38, 0.04), 0.03, 0.004, 0.5, 12);
+strand(beard, MAT.beard, V(-0.02, 0, 0), V(-0.035, -0.18, 0.05), V(-0.02, -0.38, 0.04), 0.03, 0.004, 0.5, 12);
+strand(beard, MAT.beard, V(0, 0.02, 0.02), V(0, 0.0, 0.04), V(0, -0.02, 0.03), 0.02, 0.012, 0.6, 4);   // under-lip tuft
+tagPart(neck, 'head');
+
+// arms: upper arm + forearm in wide sleeve + hand; left hand holds the bamboo slips
+const L1 = 0.27, L2 = 0.25;
+const ARM = {};
+function buildArm(s, side) {
+  const up = G('UpperArm_' + side, torso, s * 0.19, 0.41, 0);
+  { const g = new THREE.CylinderGeometry(0.07, 0.09, L1 + 0.02, 18, 1, true); g.translate(0, -L1 / 2 - 0.01, 0); const m = new THREE.Mesh(g, MAT.robe); m.castShadow = true; up.add(m); blob(up, MAT.robe, 0, -0.01, 0, 0.074, 0.06, 0.074); }
+  const fo = G('Forearm_' + side, up, 0, -L1, 0);
+  const sl = G('Sleeve_' + side, fo);
+  const hand = G('Hand_' + side, fo, 0, -L2, 0);
+  blob(hand, MAT.skin, 0, -0.045, 0, 0.034, 0.05, 0.02); blob(hand, MAT.skin, s * -0.028, -0.025, 0.012, 0.012, 0.028, 0.012, 0, 0, s * 0.5);
+  ARM[side] = { up, fo, sl, hand, s };
+}
+buildArm(1, 'L'); buildArm(-1, 'R');
+const scroll = G('Staff', ARM.R.hand);   // 藜杖：彎曲木杖，杖頭掛葫蘆
+{ const pts = []; for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(V(Math.sin(t * 9) * 0.012 + (t > 0.85 ? (t - 0.85) * 0.25 : 0), -1.28 + t * 1.78, Math.cos(t * 7) * 0.01)); }
+  const c = new THREE.CatmullRomCurve3(pts), g = new THREE.TubeGeometry(c, 40, 0.018, 8, false); const m = new THREE.Mesh(g, MAT.hat); m.castShadow = true; scroll.add(m);
+  for (let k = 0; k < 4; k++) blob(scroll, MAT.hat, pts[3 + k * 2].x + 0.012, pts[3 + k * 2].y, pts[3 + k * 2].z, 0.026, 0.03, 0.026);
+  const top = pts[12]; const gd = G('Gourd', scroll, top.x - 0.04, top.y - 0.1, 0.03); blob(gd, MAT.jade, 0, -0.03, 0, 0.045, 0.05, 0.045); blob(gd, MAT.jade, 0, 0.04, 0, 0.03, 0.035, 0.03);
+  blob(gd, MAT.sash, 0, 0.0, 0, 0.032, 0.008, 0.032); strand(gd, MAT.sash, V(0, 0.07, 0), V(0.02, 0.1, 0), V(0.04, 0.1, 0), 0.004, 0.004, 1, 4); }
+tagPart(scroll, 'hands');
+
+// ===== pose engine =====
+const _e = new THREE.Euler(), UPV = V(0, -1, 0);
+const quatE = (x, y, z, o = 'XYZ') => new THREE.Quaternion().setFromEuler(_e.set(x, y, z, o));
+const qFrom = (a, b) => new THREE.Quaternion().setFromUnitVectors(a, b.clone().normalize());
+function ik(S, T, pole) {   // two-bone IK in torso space -> [qUpper, qForeLocal]
+  const d0 = T.clone().sub(S); let d = Math.min(d0.length(), (L1 + L2) * 0.985); const dir = d0.normalize();
+  const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+  const pd = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
+  const E = S.clone().addScaledVector(dir, a).addScaledVector(pd, h), Tt = S.clone().addScaledVector(dir, d);
+  const qU = qFrom(UPV, E.clone().sub(S)), qFw = qFrom(UPV, Tt.clone().sub(E)), qF = qU.clone().invert().multiply(qFw);
+  return [qU, qF, qFw]; }
+const lerpV = (a, b, k) => a.clone().lerp(b, k);
+const REST = { t: 0, look: 0, bow: 0, nod: 0, teach: 0, awake: 0, halo: 0 };
+const SH = { L: V(0.19, 0.41, 0), R: V(-0.19, 0.41, 0) };
+// sleeve geometry is built at rest so the hanging lobe points to the floor
+function buildSleeves() {
+  for (const side of ['L', 'R']) { const A = ARM[side];
+    const [qU, qF, qFw] = armQ(side, REST); const down = UPV.clone().applyQuaternion(qFw.clone().invert());   // world-down in forearm space
+    const ax = V(0, -1, 0), e1 = down.clone().sub(ax.clone().multiplyScalar(down.dot(ax))).normalize(), e2 = new THREE.Vector3().crossVectors(ax, e1).normalize();
+    const R = 7, M = 24, pos = [], uv = [], idx = [];
+    for (let i = 0; i <= R; i++) { const t = i / R, c = V(0, 0.03 - t * 0.235, 0), r = 0.092 + 0.03 * t;
+      for (let j = 0; j <= M; j++) { const f = j / M * TAU, cf = Math.cos(f), lobe = cf > 0 ? Math.pow(cf, 1.6) * 0.36 * Math.pow(t, 1.3) : 0;
+        const p = c.clone().addScaledVector(e1, Math.cos(f) * r + lobe).addScaledVector(e2, Math.sin(f) * r); pos.push(p.x, p.y, p.z); uv.push(j / M * 2, t); }
+      if (i) for (let j = 0; j < M; j++) { const a = (i - 1) * (M + 1) + j, b = a + M + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, MAT.robe); m.castShadow = true; A.sl.add(m);
+    // cuff trim: last ring band
+    const cp = [], cu = [], ci = []; for (let i = 0; i <= 1; i++) { const t = 0.9 + i * 0.1, c = V(0, 0.03 - t * 0.235, 0), r = 0.095 + 0.03 * t;
+      for (let j = 0; j <= M; j++) { const f = j / M * TAU, cf = Math.cos(f), lobe = cf > 0 ? Math.pow(cf, 1.6) * 0.363 * Math.pow(t, 1.3) : 0; const p = c.clone().addScaledVector(e1, Math.cos(f) * r + lobe).addScaledVector(e2, Math.sin(f) * r); cp.push(p.x, p.y, p.z); cu.push(j / M * 8, i); }
+      if (i) for (let j = 0; j < M; j++) { const a = j, b = j + M + 1; ci.push(a, b, a + 1, b, b + 1, a + 1); } }
+    const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3)); cg.setAttribute('uv', new THREE.Float32BufferAttribute(cu, 2)); cg.setIndex(ci); cg.computeVertexNormals();
+    const cm = new THREE.Mesh(cg, MAT.trim); cm.material = MAT.trim; A.sl.add(cm); A.sl.userData.down0 = down;
+    MAT.trim.side = THREE.DoubleSide;
+    tagPart(A.up, 'hands'); }
+}
+function targets(side, st) {
+  const s = side === 'L' ? 1 : -1, br = Math.sin(st.t * 1.1) * 0.006;
+  let T, P;
+  if (side === 'R') { T = V(-0.26, 0.1 + br, 0.17); P = V(-1, -0.8, -0.4); T = lerpV(T, V(-0.18, 0.2, 0.28), st.bow); }
+  else { T = V(0.05, 0.18 + br, 0.22); P = V(1, -0.8, -0.5); T = lerpV(T, V(-0.02, 0.34, 0.34), st.bow); P = lerpV(P, V(1, -0.6, -0.1), st.bow);
+    T = lerpV(T, V(0.28, 0.3, 0.36), st.teach); P = lerpV(P, V(1, -1.2, -0.4), st.teach); }
+  T = lerpV(T, V(s * 0.6, 0.78, 0.25), st.awake); P = lerpV(P, V(s * 0.3, -1, -0.6), st.awake);
+  return [T, P]; }
+function armQ(side, st) { const [T, P] = targets(side, st); return ik(SH[side], T, P.normalize()); }
+function computePose(st) {
+  const out = [];
+  const tq = quatE(0.08 + 0.015 * Math.sin(st.t * 1.1) + st.bow * 0.3 + st.teach * 0.03, st.teach * 0.14 + Math.sin(st.t * 0.3) * 0.02, 0);
+  out.push(['Torso', { q: tq }]);
+  const nodPitch = st.nod * 0.3 + st.bow * 0.18;
+  out.push(['Neck', { q: quatE(nodPitch * 0.4 - 0.06, 0, 0) }]);
+  out.push(['Head', { q: quatE(nodPitch * 0.6 - 0.04, st.look + st.teach * 0.28, st.teach * -0.06) }]);
+  const totalPitch = 0.08 + st.bow * 0.3 + nodPitch - 0.1;
+  out.push(['Beard', { q: quatE(-totalPitch * 0.75 + Math.sin(st.t * 1.4) * 0.03, 0, Math.sin(st.t * 0.9) * 0.02) }]);
+  for (const side of ['L', 'R']) { const [qU, qF, qFw] = armQ(side, st), s = side === 'L' ? 1 : -1;
+    out.push(['UpperArm_' + side, { q: qU }], ['Forearm_' + side, { q: qF }]);
+    // sleeve hangs toward the floor: rotate the baked lobe direction toward world-down (partially)
+    const qWorld = tq.clone().multiply(qFw), down = UPV.clone().applyQuaternion(qWorld.clone().invert()), d0 = ARM[side].sl.userData.down0;
+    if (d0) out.push(['Sleeve_' + side, { q: new THREE.Quaternion().slerp(qFrom(d0, down), 0.45) }]);
+    let hq = quatE(-0.25, 0, s * 0.15);
+    if (side === 'L') hq = hq.slerp(quatE(-0.2, -1.7, -0.3), st.teach); else hq = quatE(-0.1, 0, -0.2);
+    out.push(['Hand_' + side, { q: hq }]); }
+  return out; }
+function nodeMapOf(r) { const m = {}; r.traverse(o => { if (o.name) m[o.name] = o; }); return m; }
+function applyPose(map, st) { for (const [n, tr] of computePose(st)) { const o = map[n]; if (!o) continue; if (tr.p) o.position.copy(tr.p); if (tr.q) o.quaternion.copy(tr.q); if (tr.s) o.scale.copy(tr.s); } }
+const live = nodeMapOf(root);
+applyPose(live, REST); root.updateMatrixWorld(true); buildSleeves();
+{ // the staff stands upright on the floor, gripped by the right hand
+  const hw = new THREE.Quaternion(), hp = V(0, 0, 0); ARM.R.hand.getWorldQuaternion(hw); ARM.R.hand.getWorldPosition(hp);
+  const want = new THREE.Quaternion(), wpos = V(hp.x - 0.01, hp.y - 0.05, hp.z + 0.03);
+  scroll.quaternion.copy(hw.clone().invert().multiply(want)); scroll.position.copy(ARM.R.hand.worldToLocal(wpos));
+  const sc = 1.0 / ARM.R.hand.getWorldScale(V(0, 0, 0)).x; }
+root.traverse(o => { if (o.isMesh) o.castShadow = true; });
+tagPart(torso.children[0], 'body'); body.children.forEach(c => { if (c.isMesh && !c.userData.part) c.userData.part = 'body'; });
+
+// ===== sparks / rings =====
+const SPARK_N = 400, sparkGeo = new THREE.BufferGeometry(), sparkPos = new Float32Array(SPARK_N * 3), sparkCol = new Float32Array(SPARK_N * 3);
+const sparks = Array.from({ length: SPARK_N }, () => ({ life: 0, max: 1, v: V(0, 0, 0), c: [1, 1, 1] }));
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkCol, 3));
+const dotC = document.createElement('canvas'); dotC.width = dotC.height = 64; { const g = dotC.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }
+scene.add(new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 0.05, map: new THREE.CanvasTexture(dotC), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
+let sparkIdx = 0; const GOLD = [1, 0.82, 0.4], PINK = [1, 0.75, 0.82];
+function spark(p, v, c, life = 1.4) { const s = sparks[sparkIdx]; s.life = s.max = life; s.v.copy(v); s.c = c; sparkPos.set([p.x, p.y, p.z], sparkIdx * 3); sparkIdx = (sparkIdx + 1) % SPARK_N; }
+const rings = [], ringGeo = new THREE.RingGeometry(0.92, 1, 64);
+function ring(color) { const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.scale.setScalar(0.5); scene.add(m); rings.push({ m, t: 0 }); }
+
+// ===== 古箏 (same synth as the tour) =====
+let actx = null;
+function audio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { } } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
+const ZS = [262, 294, 330, 392, 440, 523, 587, 659, 784, 880, 1047, 1175, 1319], zc = {};
+function zhBuf(a, f) { const k = Math.round(f); if (zc[k]) return zc[k]; const sr = a.sampleRate, len = Math.floor(sr * 3.2), buf = a.createBuffer(1, len, sr), d = buf.getChannelData(0), N = Math.max(2, Math.round(sr / f)), r = new Float32Array(N); let p = 0;
+  for (let i = 0; i < N; i++) r[i] = (Math.random() * 2 - 1) * 0.8; for (let i = 0; i < N; i++) r[i] = 0.5 * (r[i] + r[(i + 1) % N]); const damp = Math.min(0.9995, 0.9985 + 0.0009 * (262 / f));
+  for (let i = 0; i < len; i++) { const nx = (p + 1) % N, v = r[p]; d[i] = v; r[p] = damp * 0.5 * (v + r[nx]); p = nx; } return zc[k] = buf; }
+function zhNote(f, delay = 0, vol = 0.5, yin = false) { const a = audio(); if (!a) return; const t0 = a.currentTime + delay, src = a.createBufferSource(), flt = a.createBiquadFilter(), body2 = a.createBiquadFilter(), g = a.createGain();
+  src.buffer = zhBuf(a, f); flt.type = 'lowpass'; flt.frequency.setValueAtTime(5200, t0); flt.frequency.exponentialRampToValueAtTime(1500, t0 + 1.6); body2.type = 'peaking'; body2.frequency.value = 420; body2.Q.value = 1.2; body2.gain.value = 4;
+  g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + 0.004); g.gain.exponentialRampToValueAtTime(0.0008, t0 + 3.0);
+  if (yin) { const r = src.playbackRate; r.setValueAtTime(1, t0 + 0.25); r.linearRampToValueAtTime(1.028, t0 + 0.5); r.linearRampToValueAtTime(1, t0 + 0.75); r.linearRampToValueAtTime(1.02, t0 + 1.0); r.linearRampToValueAtTime(1, t0 + 1.25); }
+  src.connect(flt).connect(body2).connect(g).connect(a.destination); src.start(t0); src.stop(t0 + 3.1); }
+const zhIdx = f => ZS.reduce((b, v, i) => Math.abs(v - f) < Math.abs(ZS[b] - f) ? i : b, 0);
+function zhPhrase(tonic, vol = 0.45) { const t = zhIdx(tonic), n = 2 + Math.floor(Math.random() * 2), top = Math.min(ZS.length - 1, t + n + Math.floor(Math.random() * 2)), seq = []; for (let i = 0; i < n; i++) seq.push(ZS[Math.max(t, top - i - (Math.random() < 0.3 ? 1 : 0))]); seq.push(ZS[t]); seq.forEach((f, i) => zhNote(f, i * 0.17, vol * (i === seq.length - 1 ? 1 : 0.8), i === seq.length - 1)); }
+function zhGliss(tonic, vol = 0.35) { ZS.forEach((f, i) => zhNote(f, i * 0.045, vol * 0.6)); const t = zhIdx(tonic); zhNote(ZS[t], 0.75, vol, true); zhNote(ZS[Math.min(ZS.length - 1, t + 3)], 0.8, vol * 0.7); zhNote(ZS[Math.max(0, t - 5)], 0.85, vol * 0.6); }
+
+// ===== 論語 quotes =====
+const QUOTES = [['上善若水。水善利萬物而不爭。', '第八章'], ['知人者智，自知者明。', '第三十三章'], ['道可道，非常道。', '第一章'], ['天下莫柔弱於水，而攻堅強者莫之能勝。', '第七十八章'],
+  ['千里之行，始於足下。', '第六十四章'], ['大巧若拙，大辯若訥。', '第四十五章'], ['知足不辱，知止不殆，可以長久。', '第四十四章'], ['人法地，地法天，天法道，道法自然。', '第二十五章'],
+  ['為學日益，為道日損。', '第四十八章'], ['信言不美，美言不信。', '第八十一章'], ['少則得，多則惑。', '第二十二章'], ['合抱之木，生於毫末。', '第六十四章']];
+const quoteEl = document.getElementById('quote'), hintEl = document.getElementById('hint');
+let qi = Math.floor(Math.random() * QUOTES.length);
+function showQuote(q, src) { quoteEl.innerHTML = q + '<small>《道德經・' + src + '》</small>'; quoteEl.classList.add('show'); clearTimeout(showQuote.t); showQuote.t = setTimeout(() => quoteEl.classList.remove('show'), 5200); }
+function nextQuote() { const q = QUOTES[qi++ % QUOTES.length]; showQuote(q[0], q[1]); }
+
+// ===== state & interaction =====
+const S = Object.assign({}, REST);
+const acts = [];
+function act(k, dur, fn, end) { if (acts.length) return false; acts.push({ k, t: 0, dur, fn, end }); return true; }
+const env = (k, a = 0.3, b = 0.75) => k < a ? Math.sin(Math.PI / 2 * k / a) ** 2 : k > b ? Math.sin(Math.PI / 2 * (1 - k) / (1 - b)) ** 2 : 1;
+const CLIPS = {
+  bow: [3.2, (k) => ({ bow: env(k, 0.3, 0.7), nod: Math.sin(Math.PI * Math.min(1, Math.max(0, (k - 0.3) / 0.4))) * 0.5 })],
+  nod: [2.2, (k) => ({ nod: Math.sin(k * TAU) ** 2 * Math.sin(Math.PI * k) })],
+  teach: [4.0, (k) => ({ teach: env(k, 0.22, 0.8), nod: Math.sin(Math.min(1, Math.max(0, (k - 0.35) / 0.35)) * Math.PI) * 0.35 })],
+  awake: [4.5, (k) => ({ awake: env(k, 0.3, 0.7), halo: Math.min(1, k / 0.35) * (k > 0.95 ? (1 - k) / 0.05 : 1) })],
+};
+let awakened = 0, awakeK = 0, palette = 'painted', glow = 0, bows = 0;
+function play(name, end) { const [d, fn] = CLIPS[name]; return act(name, d, (k, st) => Object.assign(st, fn(k)), end); }
+function bow() { if (!play('bow')) return; zhPhrase(440, 0.45); setTimeout(nextQuote, 700); glow = Math.max(glow, 1); return;
+  if (bows >= 3) { bows = 0; setTimeout(awaken, 3300); } else { hintEl.textContent = '作揖 ' + bows + '/3'; hintEl.style.opacity = 0.9; } }
+function nod() { if (play('nod')) { zhPhrase(440, 0.4); setTimeout(nextQuote, 400); } }
+function teach() { if (play('teach')) { zhPhrase(880, 0.4); setTimeout(nextQuote, 900); } }
+function awaken() { if (!play('awake')) return; zhGliss(262, 0.4); awakened = 1; glow = 3; hintEl.textContent = '拜師入門・成為孔門弟子'; hintEl.style.opacity = 1; setTimeout(() => showQuote('有朋自遠方來，不亦樂乎？', '學而'), 1200);
+  for (let k = 0; k < 6; k++) setTimeout(() => ring(k % 2 ? 0xffd36a : 0xffb0c0), k * 220);
+  for (let i = 0; i < 160; i++) setTimeout(() => { const a = rand() * TAU, r = 0.3 + rand() * 1.4; spark(V(Math.cos(a) * r, 2.6 + rand() * 0.6, Math.sin(a) * r), V((rand() - 0.5) * 0.3, -0.35 - rand() * 0.3, (rand() - 0.5) * 0.3), rand() < 0.6 ? PINK : GOLD, 3.5); }, i * 18); }
+
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function hit(e) { ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); const hs = ray.intersectObject(root, true).filter(h => h.object.material !== MAT.halo); return hs[0] ? hs[0].object.userData.part || 'body' : null; }
+let down = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { audio(); down = { x: e.clientX, y: e.clientY, part: hit(e) }; });
+addEventListener('pointerup', (e) => { if (down && down.part && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) { ({ head: nod, hands: teach, body: bow }[down.part] || bow)(); } down = null; });
+document.getElementById('bBow').onclick = () => { audio(); bow(); };
+document.getElementById('bTeach').onclick = () => { audio(); teach(); };
+document.getElementById('bAwake').onclick = () => { audio(); bows = 0; awaken(); };
+const bSpin = document.getElementById('bSpin'); bSpin.onclick = () => { controls.autoRotate = !controls.autoRotate; controls.autoRotateSpeed = 1.0; bSpin.classList.toggle('on', controls.autoRotate); };
+document.querySelectorAll('#modes button').forEach(b => b.onclick = () => { palette = b.dataset.m; awakened = 0; document.querySelectorAll('#modes button').forEach(x => x.classList.toggle('on', x === b)); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ===== GLB =====
+function buildClips() {
+  const FPS = 15;
+  function bake(name, dur, stFn) { const n = Math.round(dur * FPS), tracks = {};
+    for (let i = 0; i <= n; i++) { const t = i / FPS, st = Object.assign({}, REST, { t }, stFn(t / dur));
+      for (const [node, tr] of computePose(st)) for (const key of ['p', 'q', 's']) if (tr[key]) { const id = node + key; (tracks[id] ||= { node, key, times: [], vals: [] }); tracks[id].times.push(t); tracks[id].vals.push(...tr[key].toArray()); } }
+    const out = []; for (const tr of Object.values(tracks)) { const w = tr.key === 'q' ? 4 : 3, v = tr.vals; let varies = false; for (let i = w; i < v.length && !varies; i++) if (Math.abs(v[i] - v[i % w]) > 1e-4) varies = true; if (!varies) continue;
+      out.push(tr.key === 'q' ? new THREE.QuaternionKeyframeTrack(tr.node + '.quaternion', tr.times, v) : new THREE.VectorKeyframeTrack(tr.node + (tr.key === 'p' ? '.position' : '.scale'), tr.times, v)); }
+    return new THREE.AnimationClip(name, dur, out); }
+  // Idle loops seamlessly over 2π/0.3 ≈ 20.9 s? keep it short: breathing only (period matched)
+  const idleDur = TAU / 1.1 * 2;
+  return [bake('Idle', idleDur, (k) => ({ look: Math.sin(k * TAU) * 0.12 })), bake('Bow', ...CLIPS.bow), bake('Nod', ...CLIPS.nod), bake('Speak', ...CLIPS.teach)];
+}
+function buildExportScene() { setPalette('painted'); const clone = root.clone(true); applyPose(nodeMapOf(clone), REST);
+  clone.traverse(o => { if (o.isMesh) { delete o.userData.part; } });
+  const s = new THREE.Scene(); s.add(clone); return s; }
+function exportGLB() { return new Promise((res, rej) => new GLTFExporter().parse(buildExportScene(), res, rej, { binary: true, maxTextureSize: 1024, animations: buildClips() })); }
+window.__exportGLB = async () => { const u = new Uint8Array(await exportGLB()); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); };
+window.__do = (n) => ({ bow, nod, teach, awaken })[n](); window.__pal = (p) => { palette = p; };
+window.__cam = (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); controls.target.set(tx, ty, tz); };
+window.__pose = (o) => { window.__fixed = o; };
+let dl = null; try { if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {}); } catch (e) {}
+document.getElementById('bExport').onclick = async () => { showQuote('正在產生模型…', '匯出');
+  try { const buf = await exportGLB();
+    if (dl) { const zip = zipSync({ 'laozi.glb': [new Uint8Array(buf), { level: 0 }] }); try { await dl.save({ filename: 'laozi-glb.zip', data: zip }); showQuote('已下載 laozi-glb.zip', '解壓後即是 laozi.glb'); } catch (e) { showQuote(e && e.code === 'declined' ? '已取消下載' : '這裡無法下載', '匯出'); } }
+    else if (window.claude) showQuote('此預覽畫面不支援下載', '匯出');
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([buf], { type: 'model/gltf-binary' })); a.download = 'laozi.glb'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); showQuote('已下載 laozi.glb', '匯出'); }
+  } catch (e) { showQuote('匯出失敗：' + e.message, '匯出'); } };
+
+// ===== loop =====
+document.getElementById('loading').remove();
+const clock = new THREE.Clock();
+const wp = (n) => live[n].getWorldPosition(V(0, 0, 0));
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+  Object.assign(S, REST, { t }); S.look = Math.sin(t * 0.3) * 0.12;
+  for (let i = acts.length - 1; i >= 0; i--) { const a = acts[i]; a.t += dt; const k = Math.min(1, a.t / a.dur); a.fn(k, S); if (k >= 1) { acts.splice(i, 1); if (a.end) a.end(); } }
+  if (window.__fixed) Object.assign(S, window.__fixed);
+  awakeK += ((awakened ? 1 : 0) - awakeK) * Math.min(1, dt * 1.2);
+  if (awakened) S.halo = Math.max(S.halo, awakeK);
+  applyPose(live, S);
+  setPalette(palette, 'awake', awakeK);
+  glow = Math.max(0, glow - dt * 0.8); MAT.trim.emissiveIntensity = 0.6 + glow * 0.5 + awakeK * 0.4 + Math.sin(t * 2) * 0.1 * awakeK; glowLight.intensity = glow * 1.5 + awakeK * 1.2;
+  if (awakeK > 0.3 && rand() < 0.5) { const a = rand() * TAU; spark(wp('Halo').add(V(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0)), V(0, 0.15, 0.05), GOLD, 1.5); }
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.t += dt; r.m.scale.setScalar(0.5 + r.t * 1.6); r.m.material.opacity = Math.max(0, 0.85 * (1 - r.t / 1.6)); if (r.t > 1.6) { scene.remove(r.m); r.m.material.dispose(); rings.splice(i, 1); } }
+  for (let i = 0; i < SPARK_N; i++) { const s = sparks[i]; if (s.life > 0) { s.life -= dt; sparkPos[i * 3] += s.v.x * dt; sparkPos[i * 3 + 1] += s.v.y * dt; sparkPos[i * 3 + 2] += s.v.z * dt; const f = Math.max(0, s.life / s.max); sparkCol[i * 3] = s.c[0] * f; sparkCol[i * 3 + 1] = s.c[1] * f; sparkCol[i * 3 + 2] = s.c[2] * f; } else sparkCol[i * 3] = sparkCol[i * 3 + 1] = sparkCol[i * 3 + 2] = 0; }
+  sparkGeo.attributes.position.needsUpdate = sparkGeo.attributes.color.needsUpdate = true;
+  controls.update(); renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

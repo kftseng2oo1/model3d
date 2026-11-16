@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>孔門四賢・弟子塑像</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#20160e;font-family:-apple-system,"PingFang TC","Noto Serif TC",serif;color:#f1e2c8;touch-action:none}
+#title{position:fixed;top:14px;left:16px;pointer-events:none}#title h1{margin:0;font-size:22px;letter-spacing:6px}#title p{margin:3px 0 0;font-size:12px;opacity:.7}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head><body><div id="title"><h1>孔門四賢</h1><p>顏回・子路・子貢・曾子（七十二賢廊塑像的四種造型）</p></div>
+<script>
+/* 孔門弟子四型（ES5，導覽 three r147 與預覽頁共用）
+   依參考圖：顏回（盤坐讀竹簡、補丁布衣、籃與葫蘆）、子路（武士站姿、甲冑、紅巾、持劍）、
+   子貢（華服藍袍金邊、伸手論說）、曾子（跪坐小几前執筆書寫、書冊）
+   每型建好後依材質合併成少數幾個幾何，方便用 InstancedMesh 擺放大量塑像。
+   makeDisciples(THREE, opt) -> { types:{yan,zilu,zigong,zengzi}: [{geo, mat, robe}] , mats } */
+function makeDisciples(THREE, opt) {
+  opt = opt || {};
+  var V3 = THREE.Vector3, TAU = Math.PI * 2, seed = 41;
+  var rnd = function () { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  function tex(w, h, fn) { var c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); var t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if (opt.colorSpace) t.colorSpace = opt.colorSpace; return t; }
+  var slipTex = tex(128, 64, function (g, w, h) { g.fillStyle = '#d6b474'; g.fillRect(0, 0, w, h); for (var i = 0; i < 12; i++) { g.fillStyle = 'rgba(90,60,20,.55)'; g.fillRect(i * w / 12, 0, 1, h); g.fillStyle = 'rgba(40,20,10,.7)'; for (var j = 0; j < 4; j++) g.fillRect(i * w / 12 + 3, 8 + j * 13, 4, 7); } });
+  var armorTex = tex(64, 64, function (g, w, h) { g.fillStyle = '#5a5a52'; g.fillRect(0, 0, w, h); for (var y = 0; y < h; y += 8) for (var x = 0; x < w; x += 8) { g.fillStyle = (x + y) % 16 ? '#7a7a6e' : '#6a6a5e'; g.fillRect(x + ((y / 8) % 2) * 4 + 1, y + 1, 6, 6); g.fillStyle = '#9a8a5a'; g.fillRect(x + ((y / 8) % 2) * 4 + 3, y + 3, 2, 2); } });
+  var strawTex = tex(64, 64, function (g, w, h) { g.fillStyle = '#c8a868'; g.fillRect(0, 0, w, h); for (var y = 0; y < h; y += 4) { g.fillStyle = y % 8 ? 'rgba(120,90,40,.35)' : 'rgba(255,240,200,.25)'; g.fillRect(0, y, w, 2); } });
+  var paperTex = tex(64, 64, function (g, w, h) { g.fillStyle = '#f2ead8'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(30,20,10,.6)'; for (var x = 6; x < w; x += 8) for (var y = 6; y < h - 6; y += 7) if (rnd() < 0.8) g.fillRect(x, y, 4, 4); });
+  var L = function (o) { return new THREE.MeshLambertMaterial(o); };
+  var mats = {
+    robe: L({ color: 0xffffff }), skin: L({ color: 0xe2bc96 }), hair: L({ color: 0x2a2624 }), inner: L({ color: 0xeee6d6 }),
+    trim: L({ color: 0x3a3a40 }), gold: L({ color: 0xd2a440, emissive: 0x2a1a00 }), sash: L({ color: 0xa83a2a }), leather: L({ color: 0x6a4428 }),
+    armor: L({ map: armorTex }), metal: L({ color: 0xb8b8b0 }), boot: L({ color: 0x1e1c1a }), slip: L({ map: slipTex, side: THREE.DoubleSide }),
+    straw: L({ map: strawTex }), wood: L({ color: 0x5a3a24 }), gourd: L({ color: 0xd8a24a }), paper: L({ map: paperTex, side: THREE.DoubleSide }), book: L({ color: 0x3a4a6a }), patch: L({ color: 0x8a7a62 }), cloth: L({ color: 0x3a5a8a })
+  };
+  var parts;   // [mesh] collected while building one type
+  function add(geo, mat, x, y, z, rx, ry, rz, sx, sy, sz) { var m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); m.rotation.set(rx || 0, ry || 0, rz || 0); if (sx !== undefined) m.scale.set(sx, sy, sz); parts.push(m); return m; }
+  var SPH = new THREE.SphereGeometry(1, 12, 8);
+  function S(mat, x, y, z, sx, sy, sz, rx, ry, rz) { return add(SPH, mat, x, y, z, rx, ry, rz, sx, sy, sz); }
+  function C(mat, rt, rb, h, x, y, z, rx, ry, rz, seg) { return add(new THREE.CylinderGeometry(rt, rb, h, seg || 10), mat, x, y, z, rx, ry, rz); }
+  function B(mat, w, h, d, x, y, z, rx, ry, rz) { return add(new THREE.BoxGeometry(w, h, d), mat, x, y, z, rx, ry, rz); }
+  function LA(mat, pts, sx, sz, seg, x, y, z) { var g = new THREE.LatheGeometry(pts.map(function (p) { return new THREE.Vector2(p[0], p[1]); }), seg || 16); g.scale(sx || 1, 1, sz || 1); return add(g, mat, x, y, z); }
+  function limb(mat, a, b, r0, r1, seg) { var d = b.clone().sub(a), len = d.length(), g = new THREE.CylinderGeometry(r1, r0, len, seg || 8); g.translate(0, len / 2, 0);
+    var m = new THREE.Mesh(g, mat); m.position.copy(a); m.quaternion.setFromUnitVectors(new V3(0, 1, 0), d.normalize()); parts.push(m); return m; }
+  // ---- shared head ----
+  function head(cx, cy, cz, o) {   // o: {tilt, beard:'goatee'|'full'|'thin', young, band:mat, cap:true}
+    var g = new THREE.Group(); g.position.set(cx, cy, cz); g.rotation.x = o.tilt || 0; g.rotation.y = o.turn || 0;
+    var save = parts; parts = []; var inner = parts;
+    S(mats.skin, 0, 0, 0, 0.088, 0.112, 0.098); S(mats.skin, 0, -0.05, 0.025, 0.072, 0.055, 0.07);
+    var cap = add(new THREE.SphereGeometry(1, 12, 6, 0, TAU, 0, Math.PI * 0.5), mats.hair, 0, 0.012, -0.012, -0.5, 0, 0, 0.094, 0.1, 0.104);
+    S(mats.hair, 0, 0.115, -0.03, 0.042, 0.04, 0.042);
+    if (o.cap) { C(mats.trim, 0.034, 0.04, 0.04, 0, 0.13, -0.025, -0.3); C(mats.gold, 0.004, 0.004, 0.12, 0, 0.13, -0.025, 0, 0, Math.PI / 2, 6); }
+    else if (o.band) { C(o.band, 0.046, 0.046, 0.018, 0, 0.13, -0.03, -0.3); B(o.band, 0.03, 0.12, 0.008, 0.04, 0.08, -0.08, 0.3, 0, 0.5); B(o.band, 0.03, 0.1, 0.008, -0.03, 0.08, -0.08, 0.3, 0, -0.4); }
+    else S(mats.inner, 0, 0.13, -0.03, 0.03, 0.02, 0.03);
+    for (var s = -1; s <= 1; s += 2) { S(mats.skin, s * 0.086, -0.01, -0.005, 0.016, 0.034, 0.022);
+      S(mats.hair, s * 0.032, 0.012, 0.09, 0.016, 0.004, 0.005, 0, 0, -s * (o.fierce ? -0.25 : 0.1));
+      S(mats.hair, s * 0.034, 0.03, 0.088, 0.024, 0.006, 0.008, 0, 0, o.fierce ? s * 0.45 : -s * 0.15); }
+    S(mats.skin, 0, -0.01, 0.1, 0.014, 0.026, 0.018, -0.2);
+    if (o.beard === 'full') { S(mats.hair, 0, -0.075, 0.05, 0.075, 0.06, 0.06); S(mats.hair, 0, -0.035, 0.092, 0.05, 0.012, 0.014); }
+    else { for (s = -1; s <= 1; s += 2) limb(mats.hair, new V3(s * 0.006, -0.035, 0.1), new V3(s * 0.04, -0.06, 0.088), 0.006, 0.002, 5);
+      if (o.beard !== 'none') limb(mats.hair, new V3(0, -0.095, 0.07), new V3(0, o.beard === 'thin' ? -0.17 : -0.2, 0.08), 0.018, 0.003, 6); }
+    parts = save; for (var i = 0; i < inner.length; i++) { g.add(inner[i]); } parts.push(g);
+    return g; }
+  // ---- 顏回：盤坐讀竹簡 ----
+  function yan() {
+    parts = [];
+    B(mats.straw, 1.35, 0.03, 1.0, 0, 0.015, 0.05);
+    S(mats.robe, 0, 0.13, 0.12, 0.46, 0.13, 0.34); S(mats.robe, 0.22, 0.17, 0.3, 0.16, 0.09, 0.12); S(mats.robe, -0.22, 0.17, 0.3, 0.16, 0.09, 0.12);
+    LA(mats.robe, [[0.2, 0.12], [0.22, 0.3], [0.21, 0.5], [0.2, 0.62], [0.16, 0.7], [0.07, 0.75]], 1.1, 0.78, 14, 0, 0, -0.02);
+    B(mats.patch, 0.1, 0.1, 0.02, 0.17, 0.6, 0.06, 0, 0.6, 0.2);
+    limb(mats.trim, new V3(0.07, 0.74, 0.08), new V3(-0.1, 0.42, 0.15), 0.02, 0.02, 5); limb(mats.trim, new V3(-0.07, 0.74, 0.08), new V3(0.02, 0.55, 0.16), 0.02, 0.02, 5);
+    C(mats.leather, 0.215, 0.215, 0.04, 0, 0.36, -0.01);
+    for (var s = -1; s <= 1; s += 2) { limb(mats.robe, new V3(s * 0.2, 0.66, 0), new V3(s * 0.22, 0.45, 0.12), 0.07, 0.075); limb(mats.robe, new V3(s * 0.22, 0.45, 0.12), new V3(s * 0.12, 0.47, 0.3), 0.075, 0.11);
+      S(mats.robe, s * 0.2, 0.3, 0.3, 0.12, 0.09, 0.14); S(mats.skin, s * 0.11, 0.48, 0.32, 0.03, 0.04, 0.025); }
+    var sl = new THREE.CylinderGeometry(0.2, 0.2, 0.2, 14, 1, true, -0.9, 1.8); add(sl, mats.slip, 0, 0.5, 0.15, -0.5, 0, 0);
+    head(0, 0.86, 0.04, { tilt: 0.35, beard: 'thin' });
+    C(mats.straw, 0.17, 0.14, 0.24, 0.62, 0.15, 0.02); add(new THREE.TorusGeometry(0.15, 0.012, 5, 14, Math.PI), mats.straw, 0.62, 0.27, 0.02, 0, 0.6, 0);
+    S(mats.gourd, -0.55, 0.1, 0.25, 0.09, 0.1, 0.09); S(mats.gourd, -0.55, 0.22, 0.25, 0.06, 0.07, 0.06); C(mats.leather, 0.012, 0.012, 0.04, -0.55, 0.3, 0.25);
+    return bake(); }
+  // ---- 子路：武士站姿持劍 ----
+  function zilu() {
+    parts = [];
+    for (var s = -1; s <= 1; s += 2) { var hip = new V3(s * 0.1, 0.95, 0), knee = new V3(s * 0.24, 0.52, 0.05 * s), ank = new V3(s * 0.28, 0.12, 0.02 * s);
+      limb(mats.robe, hip, knee, 0.1, 0.11); limb(mats.robe, knee, ank, 0.1, 0.075); C(mats.boot, 0.07, 0.075, 0.24, ank.x, 0.12, ank.z); S(mats.boot, ank.x, 0.04, ank.z + 0.06, 0.07, 0.04, 0.11); }
+    LA(mats.robe, [[0.27, 0.6], [0.24, 0.8], [0.2, 0.98]], 1.05, 0.85, 14);
+    LA(mats.armor, [[0.25, 0.72], [0.22, 0.86], [0.21, 1.0]], 1.08, 0.9, 14);
+    LA(mats.armor, [[0.21, 0.98], [0.24, 1.15], [0.25, 1.32], [0.2, 1.43], [0.08, 1.5]], 1.12, 0.8, 14);
+    C(mats.leather, 0.225, 0.225, 0.09, 0, 1.0, 0); S(mats.sash, 0.02, 1.0, 0.2, 0.07, 0.05, 0.04); B(mats.sash, 0.05, 0.24, 0.02, -0.04, 0.86, 0.2, 0.1, 0, 0.2); B(mats.sash, 0.05, 0.22, 0.02, 0.07, 0.87, 0.19, 0.1, 0, -0.2);
+    C(mats.sash, 0.11, 0.17, 0.09, 0, 1.49, 0.01); B(mats.sash, 0.22, 0.16, 0.02, 0, 1.4, 0.15, 0.2, 0, Math.PI / 4);
+    for (s = -1; s <= 1; s += 2) S(mats.armor, s * 0.23, 1.42, 0, 0.11, 0.06, 0.1, 0, 0, s * 0.3);
+    // right arm (−x) holds the sword pointing down and forward; left hand on the hip
+    var sR = new V3(-0.23, 1.4, 0), eR = new V3(-0.33, 1.15, 0.1), hR = new V3(-0.3, 0.95, 0.25);
+    limb(mats.robe, sR, eR, 0.075, 0.07); limb(mats.armor, eR, hR, 0.065, 0.055); S(mats.skin, hR.x, hR.y, hR.z, 0.04, 0.045, 0.04);
+    var sw = new V3(-0.42, 0.25, 0.62); limb(mats.metal, hR.clone().add(new V3(-0.01, -0.05, 0.03)), sw, 0.018, 0.008, 4); B(mats.gold, 0.12, 0.02, 0.04, hR.x - 0.005, hR.y - 0.05, hR.z + 0.03, 0.9, 0, 0);
+    var sL = new V3(0.23, 1.4, 0), eL = new V3(0.42, 1.15, -0.02), hL = new V3(0.24, 1.0, 0.08);
+    limb(mats.robe, sL, eL, 0.075, 0.07); limb(mats.armor, eL, hL, 0.065, 0.055); S(mats.skin, hL.x, hL.y, hL.z, 0.04, 0.045, 0.04);
+    limb(mats.leather, new V3(0.24, 0.95, -0.12), new V3(0.34, 0.45, 0.12), 0.025, 0.022, 6);   // scabbard
+    head(0, 1.62, 0.01, { beard: 'full', fierce: true, band: mats.cloth, turn: -0.2 });
+    C(mats.skin, 0.05, 0.055, 0.08, 0, 1.53, 0);
+    return bake(); }
+  // ---- 子貢：華服論說 ----
+  function zigong() {
+    parts = [];
+    LA(mats.robe, [[0.31, 0.0], [0.3, 0.2], [0.26, 0.6], [0.21, 0.95], [0.2, 1.04]], 1, 0.85, 16);
+    LA(mats.gold, [[0.315, 0.0], [0.318, 0.04], [0.31, 0.07]], 1, 0.85, 16);
+    LA(mats.inner, [[0.24, 0.02], [0.235, 0.12]], 0.7, 1.15, 12, 0, 0, 0.04);
+    LA(mats.robe, [[0.2, 1.0], [0.21, 1.2], [0.22, 1.36], [0.17, 1.45], [0.07, 1.52]], 1.12, 0.78, 14);
+    limb(mats.gold, new V3(0.07, 1.5, 0.1), new V3(-0.14, 1.06, 0.17), 0.026, 0.026, 5); limb(mats.inner, new V3(-0.06, 1.5, 0.1), new V3(0.0, 1.32, 0.16), 0.02, 0.02, 5);
+    limb(mats.gold, new V3(0.12, 1.02, 0.2), new V3(0.17, 0.05, 0.27), 0.02, 0.02, 5);
+    C(mats.sash, 0.21, 0.21, 0.07, 0, 1.0, 0); B(mats.sash, 0.05, 0.4, 0.015, -0.03, 0.78, 0.19, 0.06); B(mats.sash, 0.05, 0.36, 0.015, 0.04, 0.8, 0.19, 0.06);
+    S(mats.boot, 0.09, 0.03, 0.26, 0.05, 0.03, 0.07); S(mats.boot, -0.09, 0.03, 0.26, 0.05, 0.03, 0.07);
+    // right hand (−x) extended, palm up; left hand at the chest; big hanging sleeves
+    var sR = new V3(-0.2, 1.41, 0), eR = new V3(-0.3, 1.17, 0.1), hR = new V3(-0.44, 1.22, 0.32);
+    limb(mats.robe, sR, eR, 0.075, 0.08); limb(mats.robe, eR, hR, 0.08, 0.13); S(mats.robe, -0.38, 1.0, 0.24, 0.11, 0.2, 0.1); limb(mats.gold, hR.clone().add(new V3(0.02, 0, -0.03)), hR.clone().add(new V3(-0.02, 0, 0.02)), 0.135, 0.135, 10);
+    S(mats.skin, -0.47, 1.23, 0.36, 0.045, 0.015, 0.05);
+    var sL = new V3(0.2, 1.41, 0), eL = new V3(0.25, 1.15, 0.05), hL = new V3(0.06, 1.2, 0.22);
+    limb(mats.robe, sL, eL, 0.075, 0.08); limb(mats.robe, eL, hL, 0.08, 0.12); S(mats.robe, 0.17, 0.95, 0.17, 0.11, 0.22, 0.1); S(mats.skin, 0.05, 1.21, 0.25, 0.035, 0.045, 0.025);
+    head(0, 1.66, 0.01, { beard: 'goatee', cap: true, turn: -0.2 });
+    C(mats.skin, 0.05, 0.056, 0.08, 0, 1.55, 0);
+    return bake(); }
+  // ---- 曾子：跪坐小几前書寫 ----
+  function zengzi() {
+    parts = [];
+    S(mats.robe, 0, 0.12, -0.02, 0.32, 0.13, 0.32); S(mats.robe, 0, 0.08, 0.15, 0.36, 0.08, 0.22);
+    LA(mats.robe, [[0.2, 0.12], [0.22, 0.32], [0.21, 0.52], [0.2, 0.64], [0.16, 0.72], [0.07, 0.77]], 1.1, 0.78, 14, 0, 0, -0.03);
+    limb(mats.trim, new V3(0.07, 0.76, 0.06), new V3(-0.1, 0.42, 0.13), 0.022, 0.022, 5); limb(mats.inner, new V3(-0.06, 0.76, 0.06), new V3(0.01, 0.6, 0.13), 0.018, 0.018, 5);
+    C(mats.trim, 0.215, 0.215, 0.045, 0, 0.38, -0.02);
+    B(mats.wood, 0.9, 0.04, 0.42, 0, 0.32, 0.5); for (var s = -1; s <= 1; s += 2) { B(mats.wood, 0.05, 0.3, 0.36, s * 0.4, 0.15, 0.5); }
+    B(mats.paper, 0.5, 0.005, 0.26, 0.04, 0.345, 0.5, 0, 0.1, 0); C(mats.wood, 0.02, 0.02, 0.5, 0.31, 0.37, 0.48, 0, 0.1, Math.PI / 2, 6);
+    B(mats.book, 0.24, 0.05, 0.18, -0.55, 0.025, 0.3, 0, 0.3, 0); B(mats.patch, 0.22, 0.05, 0.17, -0.55, 0.075, 0.3, 0, 0.1, 0); B(mats.book, 0.2, 0.04, 0.16, 0.6, 0.02, 0.0, 0, -0.4, 0);
+    // right hand (−x) writing with a brush, left hand steadying the slip
+    var sR = new V3(-0.2, 0.68, 0), eR = new V3(-0.25, 0.45, 0.12), hR = new V3(-0.08, 0.4, 0.45);
+    limb(mats.robe, sR, eR, 0.07, 0.075); limb(mats.robe, eR, hR, 0.075, 0.11); S(mats.robe, -0.2, 0.3, 0.3, 0.1, 0.08, 0.14); S(mats.skin, hR.x, hR.y, hR.z + 0.03, 0.03, 0.03, 0.04);
+    limb(mats.wood, new V3(-0.07, 0.36, 0.5), new V3(-0.1, 0.52, 0.42), 0.008, 0.008, 4);
+    var sL = new V3(0.2, 0.68, 0), eL = new V3(0.27, 0.45, 0.1), hL = new V3(0.16, 0.38, 0.42);
+    limb(mats.robe, sL, eL, 0.07, 0.075); limb(mats.robe, eL, hL, 0.075, 0.11); S(mats.robe, 0.22, 0.28, 0.28, 0.1, 0.08, 0.14); S(mats.skin, hL.x, hL.y - 0.01, hL.z + 0.03, 0.04, 0.02, 0.045);
+    head(0, 0.89, 0.04, { tilt: 0.4, beard: 'thin' });
+    return bake(); }
+  // ---- bake: merge every part into one geometry per material ----
+  function bake() {
+    var root = new THREE.Group(), by = {}, i, keys = [];
+    for (i = 0; i < parts.length; i++) root.add(parts[i]);
+    root.updateMatrixWorld(true);
+    root.traverse(function (o) { if (!o.isMesh) return; var k = null; for (var n in mats) if (mats[n] === o.material) k = n; if (!k) return;
+      var g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()); g.applyMatrix4(o.matrixWorld); if (!by[k]) { by[k] = []; keys.push(k); } by[k].push(g); });
+    var out = [];
+    for (i = 0; i < keys.length; i++) { var list = by[keys[i]], pos = [], nor = [], uv = [];
+      for (var j = 0; j < list.length; j++) { var P = list[j].attributes.position, N = list[j].attributes.normal, U = list[j].attributes.uv;
+        for (var v = 0; v < P.count; v++) { pos.push(P.getX(v), P.getY(v), P.getZ(v)); nor.push(N.getX(v), N.getY(v), N.getZ(v)); uv.push(U ? U.getX(v) : 0, U ? U.getY(v) : 0); } }
+      var g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g2.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g2.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g2.computeBoundingSphere(); out.push({ geo: g2, mat: mats[keys[i]], robe: keys[i] === 'robe' }); }
+    parts = null; return out; }
+  return { types: { yan: yan(), zilu: zilu(), zigong: zigong(), zengzi: zengzi() }, mats: mats,
+    robeColor: { yan: 0x9a968a, zilu: 0x34508a, zigong: 0x2c4478, zengzi: 0x58585a } };
+}
+
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x2a1c12);
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,0.05,100);camera.position.set(0,1.6,5.2);
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,0.8,0);controls.enableDamping=true;
+scene.add(new THREE.HemisphereLight(0xfff0dc,0x3a2414,1.4));const k=new THREE.DirectionalLight(0xfff0d8,2.0);k.position.set(2,5,4);scene.add(k);
+const fl=new THREE.Mesh(new THREE.PlaneGeometry(30,30),new THREE.MeshLambertMaterial({color:0x6a4a30}));fl.rotation.x=-Math.PI/2;scene.add(fl);
+const D=makeDisciples(THREE,{colorSpace:THREE.SRGBColorSpace});
+const names=['yan','zilu','zigong','zengzi'];
+names.forEach((n,i)=>{for(const p of D.types[n]){const m=new THREE.InstancedMesh(p.geo,p.mat,1);const o=new THREE.Object3D();o.position.set(-2.4+i*1.6,0,0);o.updateMatrix();m.setMatrixAt(0,o.matrix);if(p.robe)m.setColorAt(0,new THREE.Color(D.robeColor[n]));scene.add(m);}});
+window.__cam=(x,y,z,tx,ty,tz)=>{camera.position.set(x,y,z);controls.target.set(tx,ty,tz);};
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+(function loop(){requestAnimationFrame(loop);controls.update();renderer.render(scene,camera);})();
+</script></body></html>
